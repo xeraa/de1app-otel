@@ -4,3 +4,11 @@ Plugin for the [Decent Espresso app](https://github.com/decentespresso/de1app). 
 
 
 ## Installation
+
+
+
+## Development
+
+* [Environment setup](https://github.com/decentespresso/de1app/blob/main/documentation/de1_app_plugin_development_overview.md#set-up-your-development-environment)
+* Symlinked the plugin file into a clone of the de1app repository: `ln -s ~/Users/philipp~/Documents/GitHub/de1app-otel/plugin.tcl
+~/GitHub/de1app/de1plus/plugins/otel/`
