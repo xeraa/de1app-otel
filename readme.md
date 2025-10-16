@@ -5,6 +5,8 @@ Plugin for the [Decent Espresso app](https://github.com/decentespresso/de1app). 
 
 ## Installation
 
+Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
+
 
 
 ## Development
