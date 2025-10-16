@@ -57,10 +57,10 @@ namespace eval ::plugins::${plugin_name} {
             plugins save_settings otel
         }
 
-        dui page add visualizer_settings -namespace [namespace current]::visualizer_settings \
+        dui page add otel_settings -namespace [namespace current]::otel_settings \
             -bg_img settings_message.png -type fpdialog
 
-        return "visualizer_settings"
+        return "otel_settings"
     }
 
     proc msg { msg } {
@@ -450,7 +450,7 @@ namespace eval ::plugins::${plugin_name} {
 
 }
 
-namespace eval ::plugins::${plugin_name}::visualizer_settings {
+namespace eval ::plugins::${plugin_name}::otel_settings {
     variable widgets
     array set widgets {}
 
@@ -522,7 +522,7 @@ namespace eval ::plugins::${plugin_name}::visualizer_settings {
             set last_id $::plugins::otel::settings(last_upload_id)
             set data(last_action_result) $::plugins::otel::settings(last_upload_result)
             dui item config $page_to_show last_action_label -text [translate "Last upload:"]
-            dui item config $page_to_show last_action -text [::plugins::otel::visualizer_settings::format_shot_start]
+            dui item config $page_to_show last_action -text [::plugins::otel::otel_settings::format_shot_start]
             dui item config $page_to_show last_action_result -text $::plugins::otel::settings(last_upload_result)
         }
 
