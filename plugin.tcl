@@ -45,6 +45,7 @@ namespace eval ::plugins::${plugin_name} {
         return "otel_settings"
     }
 
+    # Utility function for logging
     proc msg { msg } {
         catch {
             # a bad message migth cause an error here, so catching it
@@ -173,7 +174,7 @@ namespace eval ::plugins::${plugin_name} {
         }
         if {[string length $answer] == 0 || $returncode != 200} {
             msg "Forward failed: $returnfullcode"
-            popup [translate_toast "Forward failed!"]
+            popup [translate_toast "Forward failed"]
             set settings(last_upload_result) "[translate {Forward failed!}] $returnfullcode"
             plugins save_settings otel
             return
