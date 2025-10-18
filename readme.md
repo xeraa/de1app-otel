@@ -8,6 +8,12 @@ Plugin for the [Decent Espresso app](https://github.com/decentespresso/de1app). 
 Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
 
 
+## Configuration
+
+* OTLP endpoint: Where an OpenTelemetry Collector or managed endpoint is receiving the data.
+* Auto upload: Automatically upload all the log data.
+* Auto upload minimum seconds: Set to 0 to receive everything or a higher threshold to skip quick rinses or quickly cancelled operations.
+
 
 ## Development
 
