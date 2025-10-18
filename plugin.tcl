@@ -109,7 +109,7 @@ namespace eval ::plugins::${plugin_name} {
 
         # Initialize retry counter
         set retryCount 0
-        set maxAttempts 20
+        set maxAttempts 3
         set success 0
 
         set attempts 0
@@ -124,9 +124,8 @@ namespace eval ::plugins::${plugin_name} {
                 }
 
                 # exponentially increasing timeout
-                #set timeout [expr {$attempts * 2000}]
+                set timeout [expr {$attempts * 900}]
 
-                set timeout 8000
                 set token [http::geturl $url -headers $headers -method POST -query $body -timeout $timeout]
                 msg $token
 
