@@ -69,6 +69,34 @@ namespace eval ::plugins::${plugin_name} {
 
         set url "$settings(otlp_endpoint)/v1/logs"
         set headers [list "Content-Type" "application/json"]
+
+        # Parse the content JSON and extract key-value pairs
+        set contentAttrs [list]
+        set profileValue ""
+        if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
+            # Successfully parsed JSON, add each key-value pair as an attribute
+            dict for {key value} $contentDict {
+                lappend contentAttrs [json::write object \
+                    key [json::write string $key] \
+                    value [json::write object \
+                        stringValue [json::write string $value] \
+                    ] \
+                ]
+                # Extract profile value if it exists
+                if {$key eq "profile"} {
+                    set profileValue $value
+                }
+            }
+        } else {
+            # Failed to parse JSON, add the raw content as a single attribute
+            lappend contentAttrs [json::write object \
+                key [json::write string "raw_content"] \
+                value [json::write object \
+                    stringValue [json::write string $content] \
+                ] \
+            ]
+        }
+
         set body [json::write object \
             resourceLogs [json::write array \
                 [json::write object \
@@ -93,8 +121,9 @@ namespace eval ::plugins::${plugin_name} {
                                     observedTimeUnixNano [json::write string $timeNano] \
                                     severityText [json::write string "INFO"] \
                                     body [json::write object \
-                                        stringValue [json::write string "Hello, DecentEspresso! $content"] \
+                                        stringValue [json::write string $profileValue] \
                                     ] \
+                                    attributes [json::write array {*}$contentAttrs] \
                                 ] \
                             ] \
                         ] \
