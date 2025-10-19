@@ -9,8 +9,9 @@ namespace eval ::plugins::${plugin_name} {
     variable author "Philipp Krenn"
     variable contact "pk@xeraa.net"
     variable version 1.0
-    variable description "Forward logs to an OTel endpoint"
+    variable description "Forward logs to an OTel endpoint using OTLP/HTTP"
     variable name "OpenTelemetry"
+
 
     # Paint settings screen
     proc create_ui {} {
@@ -45,6 +46,7 @@ namespace eval ::plugins::${plugin_name} {
         return "otel_settings"
     }
 
+
     # Utility function for logging
     proc msg { msg } {
         catch {
@@ -53,6 +55,8 @@ namespace eval ::plugins::${plugin_name} {
         }
     }
 
+
+    # Kick off the data forward process
     proc upload {content} {
         variable settings
 
@@ -196,7 +200,7 @@ namespace eval ::plugins::${plugin_name} {
 
         if {$returncode == 401} {
             msg "Forward failed. Unauthorized"
-            popup [translate_toast "Forward failed! Authentication failed. Please check credentials"]
+            popup [translate_toast "Forward authentication failed. Please check credentials"]
             set settings(last_upload_result) [translate "Authentication failed. Please check credentials"]
             plugins save_settings otel
             return
@@ -204,7 +208,7 @@ namespace eval ::plugins::${plugin_name} {
         if {[string length $answer] == 0 || $returncode != 200} {
             msg "Forward failed: $returnfullcode"
             popup [translate_toast "Forward failed"]
-            set settings(last_upload_result) "[translate {Forward failed!}] $returnfullcode"
+            set settings(last_upload_result) "[translate {Forward failed}] $returnfullcode"
             plugins save_settings otel
             return
         }
@@ -214,7 +218,7 @@ namespace eval ::plugins::${plugin_name} {
             set response [::json::json2dict $answer]
         } err] != 0} {
             msg "Forward successful but unexpected server answer!"
-            set settings(last_upload_result) [translate "Forward successful but unexpected server answer!"]
+            set settings(last_upload_result) [translate "Forward successful but unexpected server answer"]
             plugins save_settings otel
             return
         }
@@ -224,6 +228,7 @@ namespace eval ::plugins::${plugin_name} {
 
         plugins save_settings otel
     }
+
 
     proc uploadShotData {} {
         variable settings
@@ -278,6 +283,9 @@ namespace eval ::plugins::${plugin_name} {
 
 }
 
+
+
+# The settings page
 namespace eval ::plugins::${plugin_name}::otel_settings {
     variable widgets
     array set widgets {}
