@@ -503,7 +503,15 @@ namespace eval ::plugins::${plugin_name} {
         msg "forwarding log"
 
         set settings(last_action) "upload"
-        set settings(last_forward_shot) $::settings(espresso_clock)
+
+        # Safely get espresso_clock with fallback
+        if {[info exists ::settings(espresso_clock)]} {
+            set settings(last_forward_shot) $::settings(espresso_clock)
+        } else {
+            set settings(last_forward_shot) [clock seconds]
+            msg "No espresso_clock found, using current time"
+        }
+
         set settings(last_upload_result) ""
         set timeNano [expr {[clock milliseconds] * 1000000}]
 
@@ -651,7 +659,15 @@ namespace eval ::plugins::${plugin_name} {
     proc uploadShotData {} {
         variable settings
         set settings(last_action) "upload"
-        set settings(last_forward_shot) $::settings(espresso_clock)
+
+        # Safely get espresso_clock with fallback
+        if {[info exists ::settings(espresso_clock)]} {
+            set settings(last_forward_shot) $::settings(espresso_clock)
+        } else {
+            set settings(last_forward_shot) [clock seconds]
+            msg "No espresso_clock found, using current time"
+        }
+
         set settings(last_upload_result) ""
 
         set min_seconds [ifexists settings(min_seconds) 2]
@@ -737,11 +753,15 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
 
     # This is run immediately after the settings page is shown, wherever it is invoked from
     proc show { page_to_hide page_to_show } {
-        set last_id $::plugins::otel::settings(last_upload_id)
-        set data(last_action_result) $::plugins::otel::settings(last_upload_result)
-        dui item config $page_to_show last_action_label -text [translate "Last upload:"]
+        dui item config $page_to_show last_action_label -text [translate "Last forward:"]
         dui item config $page_to_show last_action -text [::plugins::otel::otel_settings::format_shot_start]
-        dui item config $page_to_show last_action_result -text $::plugins::otel::settings(last_upload_result)
+
+        # Safely display last_upload_result
+        if {[info exists ::plugins::otel::settings(last_upload_result)]} {
+            dui item config $page_to_show last_action_result -text $::plugins::otel::settings(last_upload_result)
+        } else {
+            dui item config $page_to_show last_action_result -text ""
+        }
     }
 
 
