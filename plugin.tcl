@@ -50,6 +50,7 @@ namespace eval ::plugins::${plugin_name} {
         }
     }
 
+    # Create the header for OTLP/HTTP with optional API keys
     proc build_headers {} {
         variable settings
         set headers [list "Content-Type" "application/json"]
@@ -63,6 +64,7 @@ namespace eval ::plugins::${plugin_name} {
         return $headers
     }
 
+    # Process the log data of espresso shots
     proc parse_content_data { content } {
         # Parse the content JSON and extract key-value pairs
         set contentAttrs [list]
@@ -96,17 +98,15 @@ namespace eval ::plugins::${plugin_name} {
     }
 
     proc parse_timeseries_data { content } {
-        msg "Starting time series data parsing"
+        msg "Starting data point parsing"
 
-        # Parse the content JSON and extract time series data
+        # Parse the content JSON and extract data points
         if {[catch {set contentDict [::json::json2dict $content]} err] != 0} {
             msg "Failed to parse JSON: $err"
             return [list]
         }
 
-        msg "Successfully parsed JSON content"
-
-        # Define all time series fields we want to capture
+        # Define all data point fields we want to capture
         set timeSeriesFields {
             "elapsed"
             "pressure.pressure"
@@ -125,9 +125,9 @@ namespace eval ::plugins::${plugin_name} {
             "state_change"
         }
 
-        msg "Looking for [llength $timeSeriesFields] time series fields"
+        msg "Looking for [llength $timeSeriesFields] data point fields"
 
-        # Extract all time series arrays
+        # Extract all data point arrays
         set fieldData [dict create]
         set maxLength 0
         set foundFields 0
@@ -143,7 +143,6 @@ namespace eval ::plugins::${plugin_name} {
                     set parentData [dict get $contentDict $parentField]
                     if {[dict exists $parentData $childField]} {
                         set fieldValues [dict get $parentData $childField]
-                        msg "Found nested field '$field' (${parentField}->${childField})"
                         dict set fieldData $field $fieldValues
                         set fieldLength [llength $fieldValues]
                         msg "Field '$field' has $fieldLength values"
@@ -162,7 +161,6 @@ namespace eval ::plugins::${plugin_name} {
                 # Handle non-nested fields
                 if {[dict exists $contentDict $field]} {
                     set fieldValues [dict get $contentDict $field]
-                    msg "Found field '$field'"
                     dict set fieldData $field $fieldValues
                     set fieldLength [llength $fieldValues]
                     msg "Field '$field' has $fieldLength values"
@@ -177,13 +175,11 @@ namespace eval ::plugins::${plugin_name} {
             }
         }
 
-        msg "Found $foundFields out of [llength $timeSeriesFields] time series fields"
-        msg "Maximum field length: $maxLength"
+        msg "Found $foundFields out of [llength $timeSeriesFields] data point fields"
 
         # Check if elapsed field exists and compare lengths
         if {[dict exists $fieldData "elapsed"]} {
             set elapsedLength [llength [dict get $fieldData "elapsed"]]
-            msg "Elapsed field has $elapsedLength values"
 
             if {$elapsedLength != $maxLength} {
                 msg "WARNING: Elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
@@ -200,11 +196,11 @@ namespace eval ::plugins::${plugin_name} {
                 }
             }
         } else {
-            msg "WARNING: No 'elapsed' field found - timestamps may be incorrect for time series data"
+            msg "WARNING: No 'elapsed' field found - timestamps may be incorrect for data point"
         }
 
         if {$maxLength == 0} {
-            msg "No time series data found - all fields empty or missing"
+            msg "No data point found - all fields empty or missing"
             return [list]
         }
 
@@ -235,10 +231,9 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {[llength $dataPoints] == 0} {
-            msg "No time series data points created - all values were empty"
+            msg "No data points created - all values were empty"
         } else {
-            msg "Successfully created [llength $dataPoints] data points from time series"
-            msg "First data point: [dict get [lindex $dataPoints 0]]"
+            msg "Successfully created [llength $dataPoints] data points"
         }
         return $dataPoints
     }
@@ -272,7 +267,7 @@ namespace eval ::plugins::${plugin_name} {
         # Create the OpenTelemetry body using the dedicated function
         set body [create_otel_body $timeUnixNano $observedTimeUnixNano $profileValue $contentAttrs]
 
-        # Send the main document
+        # Send the espresso shot data
         if {[catch {
             set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
             set status [http::status $token]
@@ -280,14 +275,14 @@ namespace eval ::plugins::${plugin_name} {
             http::cleanup $token
 
             if {$returncode == 200} {
-                msg "Main document sent successfully"
+                msg "Espresso shot sent successfully"
                 return 1
             } else {
-                msg "Failed to send main document: HTTP $returncode"
+                msg "Failed to send espresso shot: HTTP $returncode"
                 return 0
             }
         } err]} {
-            msg "Error sending main document: $err"
+            msg "Error sending espresso shot: $err"
             return 0
         }
     }
@@ -358,23 +353,19 @@ namespace eval ::plugins::${plugin_name} {
     proc send_timeseries_data { content } {
         variable settings
 
-        msg "Processing time series data"
-
-        # First, send the main document using regular upload
-        msg "Sending main document"
+        # First, send the espresso shot
         set mainResult [upload_main_document $content]
-        msg "Main document upload result: $mainResult"
+        msg "Espresso shot forward result: $mainResult"
 
-        # Parse time series data
-        msg "Parsing time series data from content"
+        # Parse data points
         set dataPoints [parse_timeseries_data $content]
 
         if {[llength $dataPoints] == 0} {
-            msg "No time series data found, only main document sent"
+            msg "No data points found, only espresso shot sent"
             return $mainResult
         }
 
-        msg "Found [llength $dataPoints] time series data points to send"
+        msg "Found [llength $dataPoints] data points to send"
 
         # Set up HTTP connection for data points
         set content [encoding convertto utf-8 $content]
@@ -435,14 +426,14 @@ namespace eval ::plugins::${plugin_name} {
             after 10
         }
 
-        msg "Sent main document + $successCount/$totalCount data points successfully"
+        msg "Sent espresso shot + $successCount/$totalCount data points successfully"
 
         if {$successCount > 0} {
-            popup [translate_toast "Forwarded main document + $successCount data points"]
-            set settings(last_upload_result) "Forwarded main document + $successCount/$totalCount data points"
+            popup [translate_toast "Forwarded espresso shot + $successCount data points"]
+            set settings(last_upload_result) "Forwarded espresso shot + $successCount/$totalCount data points"
         } else {
-            popup [translate_toast "Forwarded main document only"]
-            set settings(last_upload_result) "Forwarded main document only"
+            popup [translate_toast "Forwarded espresso shot only"]
+            set settings(last_upload_result) "Forwarded espresso shot only"
         }
 
         plugins save_settings otel
@@ -515,8 +506,7 @@ namespace eval ::plugins::${plugin_name} {
         set settings(last_upload_result) ""
         set timeNano [expr {[clock milliseconds] * 1000000}]
 
-        # Check if content contains time series data
-        msg "Checking for time series data in content"
+        # Check if content contains data points
         set hasElapsed [string match "*elapsed*" $content]
         set hasPressure [string match "*pressure*" $content]
         set hasFlow [string match "*flow*" $content]
@@ -525,13 +515,13 @@ namespace eval ::plugins::${plugin_name} {
         set hasResistance [string match "*resistance*" $content]
         set hasStateChange [string match "*state_change*" $content]
 
-        msg "Time series detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
+        msg "Data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
 
         if {$hasElapsed && ($hasPressure || $hasFlow || $hasTemperature || $hasTotals || $hasResistance || $hasStateChange)} {
-            msg "Detected time series data, using specialized handler"
+            msg "Detected data points, using specialized handler"
             return [send_timeseries_data $content]
         } else {
-            msg "No time series data detected, using regular upload only"
+            msg "No data points detected, using espresso shot metadata only"
         }
 
         # Fall back to regular single-document upload
