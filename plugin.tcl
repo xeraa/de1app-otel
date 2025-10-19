@@ -81,8 +81,223 @@ namespace eval ::plugins::${plugin_name} {
         return [list $contentAttrs $profileValue]
     }
 
-    proc create_otel_body { timeNano profileValue contentAttrs } {
-        # Create the OpenTelemetry log body structure
+    proc parse_timeseries_data { content } {
+        msg "Starting time series data parsing"
+
+        # Parse the content JSON and extract time series data
+        if {[catch {set contentDict [::json::json2dict $content]} err] != 0} {
+            msg "Failed to parse JSON: $err"
+            return [list]
+        }
+
+        msg "Successfully parsed JSON content"
+
+        # Define all time series fields we want to capture
+        set timeSeriesFields {
+            "elapsed"
+            "pressure.pressure"
+            "pressure.goal"
+            "flow.flow"
+            "flow.by_weight"
+            "flow.by_weight_raw"
+            "flow.goal"
+            "temperature.basket"
+            "temperature.mix"
+            "temperature.goal"
+            "totals.weight"
+            "totals.water_dispensed"
+            "resistance.resistance"
+            "resistance.by_weight"
+            "state_change"
+        }
+
+        msg "Looking for [llength $timeSeriesFields] time series fields"
+
+        # Extract all time series arrays
+        set fieldData [dict create]
+        set maxLength 0
+        set foundFields 0
+
+        foreach field $timeSeriesFields {
+            # Handle nested fields (e.g., "pressure.pressure" means pressure->pressure)
+            if {[string match "*.*" $field]} {
+                set parts [split $field "."]
+                set parentField [lindex $parts 0]
+                set childField [lindex $parts 1]
+
+                if {[dict exists $contentDict $parentField]} {
+                    set parentData [dict get $contentDict $parentField]
+                    if {[dict exists $parentData $childField]} {
+                        set fieldValues [dict get $parentData $childField]
+                        msg "Found nested field '$field' (${parentField}->${childField})"
+                        dict set fieldData $field $fieldValues
+                        set fieldLength [llength $fieldValues]
+                        msg "Field '$field' has $fieldLength values"
+
+                        if {$fieldLength > $maxLength} {
+                            set maxLength $fieldLength
+                        }
+                        incr foundFields
+                    } else {
+                        msg "Child field '$childField' not found in '$parentField'"
+                    }
+                } else {
+                    msg "Parent field '$parentField' not found in content"
+                }
+            } else {
+                # Handle non-nested fields
+                if {[dict exists $contentDict $field]} {
+                    set fieldValues [dict get $contentDict $field]
+                    msg "Found field '$field'"
+                    dict set fieldData $field $fieldValues
+                    set fieldLength [llength $fieldValues]
+                    msg "Field '$field' has $fieldLength values"
+
+                    if {$fieldLength > $maxLength} {
+                        set maxLength $fieldLength
+                    }
+                    incr foundFields
+                } else {
+                    msg "Field '$field' not found in content"
+                }
+            }
+        }
+
+        msg "Found $foundFields out of [llength $timeSeriesFields] time series fields"
+        msg "Maximum field length: $maxLength"
+
+        # Check if elapsed field exists and compare lengths
+        if {[dict exists $fieldData "elapsed"]} {
+            set elapsedLength [llength [dict get $fieldData "elapsed"]]
+            msg "Elapsed field has $elapsedLength values"
+
+            if {$elapsedLength != $maxLength} {
+                msg "WARNING: Elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
+                msg "Some data points may have misaligned timestamps"
+            }
+
+            # Check each field against elapsed length
+            dict for {field values} $fieldData {
+                if {$field ne "elapsed"} {
+                    set fieldLength [llength $values]
+                    if {$fieldLength != $elapsedLength} {
+                        msg "WARNING: Field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
+                    }
+                }
+            }
+        } else {
+            msg "WARNING: No 'elapsed' field found - timestamps may be incorrect for time series data"
+        }
+
+        if {$maxLength == 0} {
+            msg "No time series data found - all fields empty or missing"
+            return [list]
+        }
+
+        # Create data points
+        set dataPoints [list]
+
+        for {set i 0} {$i < $maxLength} {incr i} {
+            set dataPoint [dict create]
+            set hasData 0
+
+            # Extract values for each field at this index
+            foreach field $timeSeriesFields {
+                if {[dict exists $fieldData $field]} {
+                    set fieldValues [dict get $fieldData $field]
+                    set value [lindex $fieldValues $i]
+                    if {$value ne ""} {
+                        # Use field name as-is (no longer need to remove "attributes." prefix)
+                        dict set dataPoint $field $value
+                        set hasData 1
+                    }
+                }
+            }
+
+            # Only add data point if it has at least one value
+            if {$hasData} {
+                lappend dataPoints $dataPoint
+            }
+        }
+
+        if {[llength $dataPoints] == 0} {
+            msg "No time series data points created - all values were empty"
+        } else {
+            msg "Successfully created [llength $dataPoints] data points from time series"
+            msg "First data point: [dict get [lindex $dataPoints 0]]"
+        }
+        return $dataPoints
+    }
+
+    proc upload_main_document { content } {
+        variable settings
+
+        set content [encoding convertto utf-8 $content]
+        http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
+
+        set url "$settings(otlp_endpoint)/v1/logs"
+        set headers [list "Content-Type" "application/json"]
+
+        # Parse content to get shot start time
+        if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
+            if {[dict exists $contentDict "date"]} {
+                set shotStartTime [dict get $contentDict "date"]
+                set timeUnixNano [format "%.0f" [expr {[clock scan $shotStartTime] * 1000000000}]]
+            } else {
+                set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+            }
+        } else {
+            set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        }
+
+        set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+
+        # Parse content data using the dedicated function
+        lassign [parse_content_data $content] contentAttrs profileValue
+
+        # Create the OpenTelemetry body using the dedicated function
+        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $profileValue $contentAttrs]
+
+        # Send the main document
+        if {[catch {
+            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
+            set status [http::status $token]
+            set returncode [http::ncode $token]
+            http::cleanup $token
+
+            if {$returncode == 200} {
+                msg "Main document sent successfully"
+                return 1
+            } else {
+                msg "Failed to send main document: HTTP $returncode"
+                return 0
+            }
+        } err]} {
+            msg "Error sending main document: $err"
+            return 0
+        }
+    }
+
+    proc create_timeseries_otel_body { timeUnixNano observedTimeUnixNano dataPoint } {
+        # Create OpenTelemetry body for a single data point following OTel semantic conventions
+        # Build message string dynamically from all available fields
+        set messageParts [list]
+
+        # Add elapsed time first if available
+        if {[dict exists $dataPoint "elapsed"]} {
+            lappend messageParts [dict get $dataPoint "elapsed"]
+        }
+
+        # Add all other fields in field:value format
+        dict for {field value} $dataPoint {
+            if {$field ne "elapsed"} {
+                lappend messageParts "$field:$value"
+            }
+        }
+
+        # Join all parts with commas
+        set message [join $messageParts ", "]
+
         return [json::write object \
             resourceLogs [json::write array \
                 [json::write object \
@@ -103,13 +318,160 @@ namespace eval ::plugins::${plugin_name} {
                             ] \
                             logRecords [json::write array \
                                 [json::write object \
-                                    timeUnixNano [json::write string $timeNano] \
-                                    observedTimeUnixNano [json::write string $timeNano] \
+                                    timeUnixNano [json::write string $timeUnixNano] \
+                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
+                                    severityText [json::write string "INFO"] \
+                                    body [json::write object \
+                                        stringValue [json::write string $message] \
+                                    ] \
+                                    attributes [json::write array \
+                                        [json::write object \
+                                            key [json::write string "log.type"] \
+                                            value [json::write object \
+                                                stringValue [json::write string "timeseries"] \
+                                            ] \
+                                        ] \
+                                    ] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                ] \
+            ] \
+        ]
+    }
+
+    proc send_timeseries_data { content } {
+        variable settings
+
+        msg "Processing time series data"
+
+        # First, send the main document using regular upload
+        msg "Sending main document"
+        set mainResult [upload_main_document $content]
+        msg "Main document upload result: $mainResult"
+
+        # Parse time series data
+        msg "Parsing time series data from content"
+        set dataPoints [parse_timeseries_data $content]
+
+        if {[llength $dataPoints] == 0} {
+            msg "No time series data found, only main document sent"
+            return $mainResult
+        }
+
+        msg "Found [llength $dataPoints] time series data points to send"
+
+        # Set up HTTP connection for data points
+        set content [encoding convertto utf-8 $content]
+        http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
+
+        set url "$settings(otlp_endpoint)/v1/logs"
+        set headers [list "Content-Type" "application/json"]
+
+        # Send each data point
+        set successCount 0
+        set totalCount [llength $dataPoints]
+
+        # Get shot start time from content
+        set shotStartTime [clock milliseconds]
+        if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
+            if {[dict exists $contentDict "date"]} {
+                set shotStartTime [expr {[clock scan [dict get $contentDict "date"]] * 1000}]
+            }
+        }
+
+        foreach dataPoint $dataPoints {
+
+            # Calculate timeUnixNano using shot start time + elapsed offset
+            if {[dict exists $dataPoint "elapsed"]} {
+                set elapsedSeconds [dict get $dataPoint "elapsed"]
+                set dataPointTimeMs [expr {$shotStartTime + ($elapsedSeconds * 1000)}]
+                set timeUnixNano [format "%.0f" [expr {$dataPointTimeMs * 1000000}]]
+            } else {
+                set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+                msg "No elapsed time found, using current time: $timeUnixNano"
+            }
+
+            # Use current time for observedTimeUnixNano
+            set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+
+            set body [create_timeseries_otel_body $timeUnixNano $observedTimeUnixNano $dataPoint]
+            msg "Body preview: [string range $body 0 200]..."
+
+            # Send HTTP request
+            if {[catch {
+                set token [http::geturl $url -headers $headers -method POST -query $body -timeout 5000]
+                set status [http::status $token]
+                set returncode [http::ncode $token]
+                set response [http::data $token]
+                http::cleanup $token
+
+                if {$returncode == 200} {
+                    incr successCount
+                } else {
+                    msg "Failed to send data point: HTTP $returncode"
+                    msg "Response: $response"
+                }
+            } err]} {
+                msg "Error sending data point: $err"
+            }
+
+            # Small delay to avoid overwhelming the endpoint
+            after 10
+        }
+
+        msg "Sent main document + $successCount/$totalCount data points successfully"
+
+        if {$successCount > 0} {
+            popup [translate_toast "Forwarded main document + $successCount data points"]
+            set settings(last_upload_result) "Forwarded main document + $successCount/$totalCount data points"
+        } else {
+            popup [translate_toast "Forwarded main document only"]
+            set settings(last_upload_result) "Forwarded main document only"
+        }
+
+        plugins save_settings otel
+        return [expr {$mainResult + $successCount}]
+    }
+
+    proc create_otel_body { timeUnixNano observedTimeUnixNano profileValue contentAttrs } {
+        # Create the OpenTelemetry log body structure following OTel semantic conventions
+        return [json::write object \
+            resourceLogs [json::write array \
+                [json::write object \
+                    resource [json::write object \
+                        attributes [json::write array \
+                            [json::write object \
+                                key [json::write string "service.name"] \
+                                value [json::write object \
+                                    stringValue [json::write string "decent-espresso"] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                    scopeLogs [json::write array \
+                        [json::write object \
+                            scope [json::write object \
+                                name [json::write string "otel-logger"] \
+                            ] \
+                            logRecords [json::write array \
+                                [json::write object \
+                                    timeUnixNano [json::write string $timeUnixNano] \
+                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
                                     severityText [json::write string "INFO"] \
                                     body [json::write object \
                                         stringValue [json::write string $profileValue] \
                                     ] \
-                                    attributes [json::write array {*}$contentAttrs] \
+                                    attributes [json::write array \
+                                        [json::write object \
+                                            key [json::write string "log.type"] \
+                                            value [json::write object \
+                                                stringValue [json::write string "main"] \
+                                            ] \
+                                        ] \
+                                        {*}$contentAttrs \
+                                    ] \
                                 ] \
                             ] \
                         ] \
@@ -131,6 +493,26 @@ namespace eval ::plugins::${plugin_name} {
         set settings(last_upload_result) ""
         set timeNano [expr {[clock milliseconds] * 1000000}]
 
+        # Check if content contains time series data
+        msg "Checking for time series data in content"
+        set hasElapsed [string match "*elapsed*" $content]
+        set hasPressure [string match "*pressure*" $content]
+        set hasFlow [string match "*flow*" $content]
+        set hasTemperature [string match "*temperature*" $content]
+        set hasTotals [string match "*totals*" $content]
+        set hasResistance [string match "*resistance*" $content]
+        set hasStateChange [string match "*state_change*" $content]
+
+        msg "Time series detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
+
+        if {$hasElapsed && ($hasPressure || $hasFlow || $hasTemperature || $hasTotals || $hasResistance || $hasStateChange)} {
+            msg "Detected time series data, using specialized handler"
+            return [send_timeseries_data $content]
+        } else {
+            msg "No time series data detected, using regular upload only"
+        }
+
+        # Fall back to regular single-document upload
         set content [encoding convertto utf-8 $content]
 
         http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
@@ -138,11 +520,25 @@ namespace eval ::plugins::${plugin_name} {
         set url "$settings(otlp_endpoint)/v1/logs"
         set headers [list "Content-Type" "application/json"]
 
+        # Parse content to get shot start time
+        if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
+            if {[dict exists $contentDict "date"]} {
+                set shotStartTime [dict get $contentDict "date"]
+                set timeUnixNano [format "%.0f" [expr {[clock scan $shotStartTime] * 1000000000}]]
+            } else {
+                set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+            }
+        } else {
+            set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        }
+
+        set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+
         # Parse content data using the dedicated function
         lassign [parse_content_data $content] contentAttrs profileValue
 
         # Create the OpenTelemetry body using the dedicated function
-        set body [create_otel_body $timeNano $profileValue $contentAttrs]
+        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $profileValue $contentAttrs]
 
 
         set returncode 0
