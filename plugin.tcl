@@ -21,6 +21,7 @@ namespace eval ::plugins::${plugin_name} {
         if {[array size ::plugins::otel::settings] == 0} {
             array set  ::plugins::otel::settings {
                 otlp_endpoint http://localhost:4318
+                otlp_api_key ""
                 min_seconds 2
             }
             set needs_save_settings 1
@@ -47,6 +48,19 @@ namespace eval ::plugins::${plugin_name} {
             # a bad message migth cause an error here, so catching it
             ::msg [namespace current] {*}$msg
         }
+    }
+
+    proc build_headers {} {
+        variable settings
+        set headers [list "Content-Type" "application/json"]
+
+        # Add API key if configured
+        if {[info exists settings(otlp_api_key)] && [string trim $settings(otlp_api_key)] ne ""} {
+            lappend headers "Authorization" "Bearer $settings(otlp_api_key)"
+            msg "Adding API key to request headers"
+        }
+
+        return $headers
     }
 
     proc parse_content_data { content } {
@@ -236,7 +250,7 @@ namespace eval ::plugins::${plugin_name} {
         http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
 
         set url "$settings(otlp_endpoint)/v1/logs"
-        set headers [list "Content-Type" "application/json"]
+        set headers [build_headers]
 
         # Parse content to get shot start time
         if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
@@ -367,7 +381,7 @@ namespace eval ::plugins::${plugin_name} {
         http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
 
         set url "$settings(otlp_endpoint)/v1/logs"
-        set headers [list "Content-Type" "application/json"]
+        set headers [build_headers]
 
         # Send each data point
         set successCount 0
@@ -518,7 +532,7 @@ namespace eval ::plugins::${plugin_name} {
         http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
 
         set url "$settings(otlp_endpoint)/v1/logs"
-        set headers [list "Content-Type" "application/json"]
+        set headers [build_headers]
 
         # Parse content to get shot start time
         if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
@@ -701,6 +715,11 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
         dui add entry $page_name 280 720 -tags endpoint -width 38 -font Helv_8  -borderwidth 1 -bg #fbfaff -foreground #4e85f4 -textvariable ::plugins::otel::settings(otlp_endpoint) -relief flat  -highlightthickness 1 -highlightcolor #000000 \
             -label [translate "Endpoint"] -label_pos {280 660} -label_font Helv_8 -label_width 1000 -label_fill "#444444"
         bind $widgets(endpoint) <Return> [namespace current]::save_settings
+
+        # API Key
+        dui add entry $page_name 280 860 -tags api_key -width 38 -font Helv_8  -borderwidth 1 -bg #fbfaff -foreground #4e85f4 -textvariable ::plugins::otel::settings(otlp_api_key) -relief flat  -highlightthickness 1 -highlightcolor #000000 \
+            -label [translate "API Key (optional)"] -label_pos {280 800} -label_font Helv_8 -label_width 1000 -label_fill "#444444"
+        bind $widgets(api_key) <Return> [namespace current]::save_settings
 
         # Minimum seconds to forward
         dui add entry $page_name 280 980 -tags min_seconds -textvariable ::plugins::otel::settings(min_seconds) -width 3 -font Helv_8  -borderwidth 1 -bg #fbfaff  -foreground #4e85f4 -relief flat -highlightthickness 1 -highlightcolor #000000 \
