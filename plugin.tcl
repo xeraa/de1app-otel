@@ -250,7 +250,7 @@ namespace eval ::plugins::${plugin_name} {
             save_plugin_settings otel
             return
         }
-        msg "espresso_elapsed range end end = [espresso_elapsed range end end]"
+        msg "espresso_elapsed = [espresso_elapsed range end end]s"
         if {[espresso_elapsed range end end] < $min_seconds } {
             set settings(last_upload_result) [translate "Not forwarded: shot duration was less than $min_seconds seconds"]
             save_plugin_settings otel
