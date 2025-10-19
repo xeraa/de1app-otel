@@ -292,9 +292,14 @@ namespace eval ::plugins::${plugin_name} {
         # Build message string dynamically from all available fields
         set messageParts [list]
 
-        # Add elapsed time first if available
+        # Add absolute timestamp as first part in human-readable format with timezone
+        set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
+        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        lappend messageParts "\[$humanReadableTimestamp\]"
+
+        # Add elapsed time with prefix if available
         if {[dict exists $dataPoint "elapsed"]} {
-            lappend messageParts [dict get $dataPoint "elapsed"]
+            lappend messageParts "elapsed:[dict get $dataPoint "elapsed"]"
         }
 
         # Add all other fields in field:value format
