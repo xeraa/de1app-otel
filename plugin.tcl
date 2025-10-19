@@ -66,22 +66,27 @@ namespace eval ::plugins::${plugin_name} {
 
     # Process the log data of espresso shots
     proc parse_content_data { content } {
-        # Parse the content JSON and extract key-value pairs
+        # Parse the content JSON and extract only profile, meta, and app fields
         set contentAttrs [list]
         set profileValue ""
 
+        # Define which fields to include
+        set allowedFields [list "profile" "meta" "app"]
+
         if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
-            # Successfully parsed JSON, add each key-value pair as an attribute
+            # Successfully parsed JSON, only add allowed fields
             dict for {key value} $contentDict {
-                lappend contentAttrs [json::write object \
-                    key [json::write string $key] \
-                    value [json::write object \
-                        stringValue [json::write string $value] \
-                    ] \
-                ]
-                # Extract profile value if it exists
-                if {$key eq "profile"} {
-                    set profileValue $value
+                if {$key in $allowedFields} {
+                    lappend contentAttrs [json::write object \
+                        key [json::write string $key] \
+                        value [json::write object \
+                            stringValue [json::write string $value] \
+                        ] \
+                    ]
+                    # Extract profile value if it exists
+                    if {$key eq "profile"} {
+                        set profileValue $value
+                    }
                 }
             }
         } else {
