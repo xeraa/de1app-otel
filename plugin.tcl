@@ -243,24 +243,19 @@ namespace eval ::plugins::${plugin_name} {
             save_plugin_settings otel
             return
         }
-        set bev_type [ifexists ::settings(beverage_type) "espresso"]
-        if {$bev_type eq "cleaning" || $bev_type eq "calibrate"} {
-            set settings(last_upload_result) [translate "Not uploaded: Profile was 'cleaning' or 'calibrate'"]
-            save_plugin_settings otel
-            return
-        }
 
         set espresso_data [::shot::create]
         ::plugins::otel::upload $espresso_data
     }
 
+
+    # Kick off the background data forwarding
     proc async_dispatch {old new} {
-        # Prevent uploading of data if last flow was HotWater or HotWaterRinse
-        if { $old eq "Espresso" } {
-            after 100 ::plugins::otel::uploadShotData
-        }
+        after 100 ::plugins::otel::uploadShotData
     }
 
+
+    # Entry point into the application
     proc main {} {
         plugins gui otel [create_ui]
         ::de1::event::listener::after_flow_complete_add \
