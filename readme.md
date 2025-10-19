@@ -18,8 +18,8 @@ Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
 ## Development
 
 * [Environment setup](https://github.com/decentespresso/de1app/blob/main/documentation/de1_app_plugin_development_overview.md#set-up-your-development-environment)
-* Symlinked the plugin file into a clone of the de1app repository: `ln -s ~/Users/philipp~/Documents/GitHub/de1app-otel/plugin.tcl
-~/GitHub/de1app/de1plus/plugins/otel/`
+* Symlinked the plugin file into a clone of the de1app repository: `ln -s ~/Documents/GitHub/de1app-otel/plugin.tcl
+~/Documents/GitHub/de1app/de1plus/plugins/otel/`
 * Start a local OTel Collector: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot`
 * Send the following request and find the result in Kibana to make sure it's working end to end:
 
@@ -49,3 +49,5 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
     }]
 }'
 ```
+
+* Follow the log files in `~/Documents/GitHub/de1app/de1plus/` with `tail -f log.txt | grep -i -E "(ERROR|WARNING|otel)"`. You might have to explicitly flush them with the start / stop button in the app.

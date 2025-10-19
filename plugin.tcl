@@ -193,7 +193,7 @@ namespace eval ::plugins::${plugin_name} {
                 incr retryCount
 
                 # Log error message
-                msg "Error during forward attempt $retryCount: $err"
+                msg "error during forward attempt $retryCount: $err"
                 set returnfullcode $err
 
                 # Clean up HTTP token if necessary
@@ -206,31 +206,31 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {$returncode == 401} {
-            msg "Forward failed. Unauthorized"
+            msg "forward failed: unauthorized"
             popup [translate_toast "Forward authentication failed. Please check credentials"]
             set settings(last_upload_result) [translate "Authentication failed. Please check credentials"]
             plugins save_settings otel
             return
         }
         if {[string length $answer] == 0 || $returncode != 200} {
-            msg "Forward failed: $returnfullcode"
+            msg "forward failed: $returnfullcode"
             popup [translate_toast "Forward failed"]
             set settings(last_upload_result) "[translate {Forward failed}] $returnfullcode"
             plugins save_settings otel
             return
         }
 
-        popup [translate_toast "Forward successful"]
         if {[catch {
             set response [::json::json2dict $answer]
         } err] != 0} {
-            msg "Forward successful but unexpected server answer!"
+            msg "forward successful but unexpected server answer"
             set settings(last_upload_result) [translate "Forward successful but unexpected server answer"]
             plugins save_settings otel
             return
         }
 
-        msg "Forward successful"
+        popup [translate_toast "Forward successful"]
+        msg "forward successful"
         set settings(last_upload_result) "[translate {Forward successful}]"
         save_plugin_settings otel
 
