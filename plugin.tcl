@@ -49,28 +49,11 @@ namespace eval ::plugins::${plugin_name} {
         }
     }
 
-
-    # Kick off the data forward process
-    proc upload {content} {
-        variable settings
-
-        msg "forwarding log"
-
-        set settings(last_action) "upload"
-        set settings(last_forward_shot) $::settings(espresso_clock)
-        set settings(last_upload_result) ""
-        set timeNano [expr {[clock milliseconds] * 1000000}]
-
-        set content [encoding convertto utf-8 $content]
-
-        http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
-
-        set url "$settings(otlp_endpoint)/v1/logs"
-        set headers [list "Content-Type" "application/json"]
-
+    proc parse_content_data { content } {
         # Parse the content JSON and extract key-value pairs
         set contentAttrs [list]
         set profileValue ""
+
         if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
             # Successfully parsed JSON, add each key-value pair as an attribute
             dict for {key value} $contentDict {
@@ -95,7 +78,12 @@ namespace eval ::plugins::${plugin_name} {
             ]
         }
 
-        set body [json::write object \
+        return [list $contentAttrs $profileValue]
+    }
+
+    proc create_otel_body { timeNano profileValue contentAttrs } {
+        # Create the OpenTelemetry log body structure
+        return [json::write object \
             resourceLogs [json::write array \
                 [json::write object \
                     resource [json::write object \
@@ -129,6 +117,32 @@ namespace eval ::plugins::${plugin_name} {
                 ] \
             ] \
         ]
+    }
+
+
+    # Kick off the data forward process
+    proc upload {content} {
+        variable settings
+
+        msg "forwarding log"
+
+        set settings(last_action) "upload"
+        set settings(last_forward_shot) $::settings(espresso_clock)
+        set settings(last_upload_result) ""
+        set timeNano [expr {[clock milliseconds] * 1000000}]
+
+        set content [encoding convertto utf-8 $content]
+
+        http::register https 443 [list ::tls::socket -servername $settings(otlp_endpoint)]
+
+        set url "$settings(otlp_endpoint)/v1/logs"
+        set headers [list "Content-Type" "application/json"]
+
+        # Parse content data using the dedicated function
+        lassign [parse_content_data $content] contentAttrs profileValue
+
+        # Create the OpenTelemetry body using the dedicated function
+        set body [create_otel_body $timeNano $profileValue $contentAttrs]
 
 
         set returncode 0
