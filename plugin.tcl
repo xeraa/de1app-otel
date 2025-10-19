@@ -337,7 +337,7 @@ namespace eval ::plugins::${plugin_name} {
                                         [json::write object \
                                             key [json::write string "log.type"] \
                                             value [json::write object \
-                                                stringValue [json::write string "timeseries"] \
+                                                stringValue [json::write string "espresso_data-point"] \
                                             ] \
                                         ] \
                                     ] \
@@ -472,7 +472,7 @@ namespace eval ::plugins::${plugin_name} {
                                         [json::write object \
                                             key [json::write string "log.type"] \
                                             value [json::write object \
-                                                stringValue [json::write string "main"] \
+                                                stringValue [json::write string "espresso_shot"] \
                                             ] \
                                         ] \
                                         {*}$contentAttrs \
