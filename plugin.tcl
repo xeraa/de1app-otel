@@ -20,21 +20,15 @@ namespace eval ::plugins::${plugin_name} {
         # Create settings if non-existant
         if {[array size ::plugins::otel::settings] == 0} {
             array set  ::plugins::otel::settings {
-                auto_upload 1
                 otlp_endpoint http://localhost:4318
+                min_seconds 2
             }
             set needs_save_settings 1
         }
         if { ![info exists ::plugins::otel::settings(last_forward_shot)] } {
             set ::plugins::otel::settings(last_forward_shot) {}
             set ::plugins::otel::settings(last_upload_result) {}
-            set ::plugins::otel::settings(auto_upload_min_seconds) 2
             set needs_save_settings 1
-        }
-        if { ![info exists ::plugins::otel::settings(last_action)] } {
-            set ::plugins::otel::settings(last_download_result) {}
-            set ::plugins::otel::settings(last_download_shot_start) {}
-            set ::plugins::otel::settings(last_action) {}
         }
         if { $needs_save_settings == 1 } {
             plugins save_settings otel
@@ -225,6 +219,7 @@ namespace eval ::plugins::${plugin_name} {
 
         msg "Forward successful"
         set settings(last_upload_result) "[translate {Forward successful}]"
+        save_plugin_settings otel
 
         plugins save_settings otel
     }
@@ -236,12 +231,7 @@ namespace eval ::plugins::${plugin_name} {
         set settings(last_forward_shot) $::settings(espresso_clock)
         set settings(last_upload_result) ""
 
-        if { ! $settings(auto_upload) } {
-            set settings(last_upload_result) [translate "Not forwarded: auto-forward is not enabled"]
-            save_plugin_settings otel
-            return
-        }
-        set min_seconds [ifexists settings(auto_upload_min_seconds) 6]
+        set min_seconds [ifexists settings(min_seconds) 2]
         if {[espresso_elapsed length] < $min_seconds && [espresso_pressure length] < $min_seconds } {
             set settings(last_upload_result) [translate "Not forwarded: shot was too short"]
             save_plugin_settings otel
@@ -293,8 +283,6 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
     variable data
     array set data {}
 
-    variable qr_img
-
     proc setup { } {
         variable widgets
         set page_name [namespace tail [namespace current]]
@@ -310,26 +298,29 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
             -label [translate "Endpoint"] -label_pos {280 660} -label_font Helv_8 -label_width 1000 -label_fill "#444444"
         bind $widgets(endpoint) <Return> [namespace current]::save_settings
 
-        # Auto-Upload
-        dui add dcheckbox $page_name 280 840 -tags auto_upload -textvariable ::plugins::otel::settings(auto_upload) -fill "#444444" \
-            -label [translate "Auto-Upload"] -label_font Helv_8 -label_fill #4e85f4 -command save_settings
-
-        # Mininum seconds to Auto-Upload
-        dui add entry $page_name 280 980 -tags auto_upload_min_seconds -textvariable ::plugins::otel::settings(auto_upload_min_seconds) -width 3 -font Helv_8  -borderwidth 1 -bg #fbfaff  -foreground #4e85f4 -relief flat -highlightthickness 1 -highlightcolor #000000 \
-            -label [translate "Minimum shot seconds to auto-upload"] -label_pos {280 920} -label_font Helv_8 -label_width 1100 -label_fill "#444444"
-        bind $widgets(auto_upload_min_seconds) <Return> [namespace current]::save_settings
+        # Minimum seconds to forward
+        dui add entry $page_name 280 980 -tags min_seconds -textvariable ::plugins::otel::settings(min_seconds) -width 3 -font Helv_8  -borderwidth 1 -bg #fbfaff  -foreground #4e85f4 -relief flat -highlightthickness 1 -highlightcolor #000000 \
+            -label [translate "Minimum shot seconds to upload"] -label_pos {280 920} -label_font Helv_8 -label_width 1100 -label_fill "#444444"
+        bind $widgets(min_seconds) <Return> [namespace current]::save_settings
 
         # Last upload shot
         dui add dtext $page_name 1350 480 -tags last_action_label -text [translate "Last upload:"] -font Helv_8 -width 900 -fill "#444444"
-        dui add dtext $page_name 1350 540 -tags last_action -font Helv_8 -width 900 -fill "#4e85f4" -anchor "nw" -justify "left"
+        dui add dtext $page_name 1350 540 -tags last_action -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
 
         # Last upload result
-        dui add dtext $page_name 1350 600 -tags last_action_result -font Helv_8 -width 900 -fill "#4e85f4" -anchor "nw" -justify "left"
-
-        image create photo [namespace current]::qr_img -width [dui::platform::rescale_x 1500] -height [dui::platform::rescale_y 1500]
-        dui add image $page_name 1900 800 {} -tags qr
-        dui item config $page_name qr -image [namespace current]::qr_img
+        dui add dtext $page_name 1350 600 -tags last_action_result -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
     }
+
+
+    # This is run immediately after the settings page is shown, wherever it is invoked from
+    proc show { page_to_hide page_to_show } {
+        set last_id $::plugins::otel::settings(last_upload_id)
+        set data(last_action_result) $::plugins::otel::settings(last_upload_result)
+        dui item config $page_to_show last_action_label -text [translate "Last upload:"]
+        dui item config $page_to_show last_action -text [::plugins::otel::otel_settings::format_shot_start]
+        dui item config $page_to_show last_action_result -text $::plugins::otel::settings(last_upload_result)
+    }
+
 
     proc format_shot_start {} {
         set dt $::plugins::otel::settings(last_forward_shot)
