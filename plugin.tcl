@@ -200,7 +200,6 @@ namespace eval ::plugins::${plugin_name} {
                 catch { http::cleanup $token }
 
                 if {$retryCount < $maxAttempts} {
-                    #after [expr {5000 * $retryCount}]
                     after 1000
                 }
             }
