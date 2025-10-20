@@ -43,12 +43,6 @@ namespace eval ::plugins::${plugin_name} {
 
 
     # Utility function for logging
-    proc msg { msg } {
-        catch {
-            # a bad message migth cause an error here, so catching it
-            ::msg [namespace current] {*}$msg
-        }
-    }
 
     # Create the header for OTLP/HTTP with optional API keys
     proc build_headers {} {
@@ -58,7 +52,7 @@ namespace eval ::plugins::${plugin_name} {
         # Add API key if configured
         if {[info exists settings(otlp_api_key)] && [string trim $settings(otlp_api_key)] ne ""} {
             lappend headers "Authorization" "Bearer $settings(otlp_api_key)"
-            msg "Adding API key to request headers"
+            ::comms::msg -NOTICE "OTEL: adding API key to request headers"
         }
 
         return $headers
@@ -107,7 +101,7 @@ namespace eval ::plugins::${plugin_name} {
 
         # Parse the content JSON and extract data points
         if {[catch {set contentDict [::json::json2dict $content]} err] != 0} {
-            msg "failed to parse JSON: $err"
+            ::comms::msg -ERROR "OTEL: failed to parse JSON: $err"
             return [list]
         }
 
@@ -148,17 +142,12 @@ namespace eval ::plugins::${plugin_name} {
                         set fieldValues [dict get $parentData $childField]
                         dict set fieldData $field $fieldValues
                         set fieldLength [llength $fieldValues]
-                        msg "field '$field' has $fieldLength values"
 
                         if {$fieldLength > $maxLength} {
                             set maxLength $fieldLength
                         }
                         incr foundFields
-                    } else {
-                        msg "child field '$childField' not found in '$parentField'"
                     }
-                } else {
-                    msg "packagearent field '$parentField' not found in content"
                 }
             } else {
                 # Handle non-nested fields
@@ -166,26 +155,23 @@ namespace eval ::plugins::${plugin_name} {
                     set fieldValues [dict get $contentDict $field]
                     dict set fieldData $field $fieldValues
                     set fieldLength [llength $fieldValues]
-                    msg "field '$field' has $fieldLength values"
 
                     if {$fieldLength > $maxLength} {
                         set maxLength $fieldLength
                     }
                     incr foundFields
-                } else {
-                    msg "field '$field' not found in content"
                 }
             }
         }
 
-        msg "found $foundFields out of [llength $timeSeriesFields] data point fields"
+        ::comms::msg -NOTICE "OTEL: found $foundFields out of [llength $timeSeriesFields] data point fields"
 
         # Check if elapsed field exists and compare lengths
         if {[dict exists $fieldData "elapsed"]} {
             set elapsedLength [llength [dict get $fieldData "elapsed"]]
 
             if {$elapsedLength != $maxLength} {
-                msg "WARNING: elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
+                ::comms::msg -WARNING "OTEL: elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
             }
 
             # Check each field against elapsed length
@@ -193,16 +179,16 @@ namespace eval ::plugins::${plugin_name} {
                 if {$field ne "elapsed"} {
                     set fieldLength [llength $values]
                     if {$fieldLength != $elapsedLength} {
-                        msg "WARNING: field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
+                        ::comms::msg -WARNING "OTEL: field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
                     }
                 }
             }
         } else {
-            msg "WARNING: no 'elapsed' field found - timestamps may be incorrect for data point"
+            ::comms::msg -WARNING "OTEL: no 'elapsed' field found - timestamps may be incorrect for data point"
         }
 
         if {$maxLength == 0} {
-            msg "no data point found - all fields empty or missing"
+            ::comms::msg -NOTICE "OTEL: no data point found - all fields empty or missing"
             return [list]
         }
 
@@ -233,9 +219,9 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {[llength $dataPoints] == 0} {
-            msg "no data points created - all values were empty"
+            ::comms::msg -WARNING "OTEL: no data points created - all values were empty"
         } else {
-            msg "successfully created [llength $dataPoints] data points"
+            ::comms::msg -NOTICE "OTEL: successfully created [llength $dataPoints] data points"
         }
         return $dataPoints
     }
@@ -277,14 +263,14 @@ namespace eval ::plugins::${plugin_name} {
             http::cleanup $token
 
             if {$returncode == 200} {
-                msg "espresso shot sent successfully"
+                ::comms::msg -NOTICE "OTEL: espresso shot sent successfully"
                 return 1
             } else {
-                msg "failed to send espresso shot: HTTP $returncode"
+                ::comms::msg -WARNING "OTEL: failed to send espresso shot: HTTP $returncode"
                 return 0
             }
         } err]} {
-            msg "error sending espresso shot: $err"
+            ::comms::msg -ERROR "OTEL: error sending espresso shot: $err"
             return 0
         }
     }
@@ -362,17 +348,17 @@ namespace eval ::plugins::${plugin_name} {
 
         # First, send the espresso shot
         set mainResult [upload_main_document $content]
-        msg "Espresso shot forward result: $mainResult"
+        ::comms::msg -NOTICE "OTEL: espresso shot forward result: $mainResult"
 
         # Parse data points
         set dataPoints [parse_timeseries_data $content]
 
         if {[llength $dataPoints] == 0} {
-            msg "No data points found, only espresso shot sent"
+            ::comms::msg -NOTICE "OTEL: no data points found, only espresso shot sent"
             return $mainResult
         }
 
-        msg "Found [llength $dataPoints] data points to send"
+        ::comms::msg -NOTICE "OTEL: found [llength $dataPoints] data points to send"
 
         # Set up HTTP connection for data points
         set content [encoding convertto utf-8 $content]
@@ -402,14 +388,13 @@ namespace eval ::plugins::${plugin_name} {
                 set timeUnixNano [format "%.0f" [expr {$dataPointTimeMs * 1000000}]]
             } else {
                 set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
-                msg "No elapsed time found, using current time: $timeUnixNano"
+                ::comms::msg -WARNING "OTEL: no elapsed time found, using current time: $timeUnixNano"
             }
 
             # Use current time for observedTimeUnixNano
             set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
 
             set body [create_timeseries_otel_body $timeUnixNano $observedTimeUnixNano $dataPoint]
-            msg "Body preview: [string range $body 0 200]..."
 
             # Send HTTP request
             if {[catch {
@@ -422,18 +407,18 @@ namespace eval ::plugins::${plugin_name} {
                 if {$returncode == 200} {
                     incr successCount
                 } else {
-                    msg "Failed to send data point: HTTP $returncode"
-                    msg "Response: $response"
+                    ::comms::msg -WARNING "OTEL: failed to send data point: HTTP $returncode"
+                    ::comms::msg -WARNING "OTEL: response: $response"
                 }
             } err]} {
-                msg "Error sending data point: $err"
+                ::comms::msg -ERROR "OTEL: error sending data point: $err"
             }
 
             # Small delay to avoid overwhelming the endpoint
             after 10
         }
 
-        msg "Sent espresso shot + $successCount/$totalCount data points successfully"
+        ::comms::msg -NOTICE "OTEL: sent espresso shot + $successCount/$totalCount data points successfully"
 
         if {$successCount > 0} {
             popup [translate_toast "Forwarded espresso shot + $successCount data points"]
@@ -497,7 +482,7 @@ namespace eval ::plugins::${plugin_name} {
     proc upload {content} {
         variable settings
 
-        msg "forwarding log"
+        ::comms::msg -NOTICE "OTEL: forwarding log"
 
         set settings(last_action) "upload"
 
@@ -506,7 +491,7 @@ namespace eval ::plugins::${plugin_name} {
             set settings(last_forward_shot) $::settings(espresso_clock)
         } else {
             set settings(last_forward_shot) [clock seconds]
-            msg "No espresso_clock found, using current time"
+            ::comms::msg -NOTICE "OTEL: no espresso_clock found, using current time"
         }
 
         set settings(last_upload_result) ""
@@ -521,12 +506,12 @@ namespace eval ::plugins::${plugin_name} {
         set hasResistance [string match "*resistance*" $content]
         set hasStateChange [string match "*state_change*" $content]
 
-        msg "data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
+        ::comms::msg -NOTICE "OTEL: data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
 
         if {$hasElapsed && ($hasPressure || $hasFlow || $hasTemperature || $hasTotals || $hasResistance || $hasStateChange)} {
             return [send_timeseries_data $content]
         } else {
-            msg "no data points detected, using espresso shot data only"
+            ::comms::msg -NOTICE "OTEL: no data points detected, using espresso shot data only"
         }
 
         # Fall back to regular single-document upload
@@ -582,14 +567,11 @@ namespace eval ::plugins::${plugin_name} {
                 set timeout [expr {$attempts * 900}]
 
                 set token [http::geturl $url -headers $headers -method POST -query $body -timeout $timeout]
-                msg $token
 
                 set status [http::status $token]
                 set answer [http::data $token]
                 set returncode [http::ncode $token]
                 set returnfullcode [http::code $token]
-                msg "status: $status"
-                msg "answer $answer"
 
                 http::cleanup $token
 
@@ -606,7 +588,7 @@ namespace eval ::plugins::${plugin_name} {
                 incr retryCount
 
                 # Log error message
-                msg "error during forward attempt $retryCount: $err"
+                ::comms::msg -ERROR "OTEL: error during forward attempt $retryCount: $err"
                 set returnfullcode $err
 
                 # Clean up HTTP token if necessary
@@ -619,14 +601,14 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {$returncode == 401} {
-            msg "forward failed: unauthorized"
+            ::comms::msg -ERROR "OTEL: forward failed: unauthorized"
             popup [translate_toast "Forward authentication failed. Please check credentials"]
             set settings(last_upload_result) [translate "Authentication failed. Please check credentials"]
             plugins save_settings otel
             return
         }
         if {[string length $answer] == 0 || $returncode != 200} {
-            msg "forward failed: $returnfullcode"
+            ::comms::msg -ERROR "OTEL: forward failed: $returnfullcode"
             popup [translate_toast "Forward failed"]
             set settings(last_upload_result) "[translate {Forward failed}] $returnfullcode"
             plugins save_settings otel
@@ -636,14 +618,14 @@ namespace eval ::plugins::${plugin_name} {
         if {[catch {
             set response [::json::json2dict $answer]
         } err] != 0} {
-            msg "forward successful but unexpected server answer"
+            ::comms::msg -WARNING "OTEL: forward successful but unexpected server answer"
             set settings(last_upload_result) [translate "Forward successful but unexpected server answer"]
             plugins save_settings otel
             return
         }
 
         popup [translate_toast "Forward successful"]
-        msg "forward successful"
+        ::comms::msg -NOTICE "OTEL: forward successful"
         set settings(last_upload_result) "[translate {Forward successful}]"
         save_plugin_settings otel
 
@@ -660,7 +642,7 @@ namespace eval ::plugins::${plugin_name} {
             set settings(last_forward_shot) $::settings(espresso_clock)
         } else {
             set settings(last_forward_shot) [clock seconds]
-            msg "no espresso_clock found, using current time"
+            ::comms::msg -NOTICE "OTEL: no espresso_clock found, using current time"
         }
 
         set settings(last_upload_result) ""
@@ -671,7 +653,7 @@ namespace eval ::plugins::${plugin_name} {
             save_plugin_settings otel
             return
         }
-        msg "espresso_elapsed = [espresso_elapsed range end end]s"
+        ::comms::msg -NOTICE "OTEL: espresso_elapsed = [espresso_elapsed range end end]s"
         if {[espresso_elapsed range end end] < $min_seconds } {
             set settings(last_upload_result) [translate "Not forwarded: shot duration was less than $min_seconds seconds"]
             save_plugin_settings otel
@@ -693,7 +675,7 @@ namespace eval ::plugins::${plugin_name} {
         if {[info exists ::de1(water_level)]} {
             set current_mm $::de1(water_level)
         } else {
-            msg "couldn't find or access water level"
+            ::comms::msg -WARNING "OTEL: couldn't find or access water level"
         }
 
         # Compute corrected refill threshold (settings + hardware correction)
@@ -728,11 +710,8 @@ namespace eval ::plugins::${plugin_name} {
         set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
         set headers [build_headers]
 
-        msg "Water level endpoint URL: $url"
         set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
         set observedTimeUnixNano $timeUnixNano
-
-        msg "Water level OTEL body - timeUnixNano: $timeUnixNano, observedTimeUnixNano: $observedTimeUnixNano"
 
         set body [json::write object \
             resourceLogs [json::write array \
@@ -784,13 +763,13 @@ namespace eval ::plugins::${plugin_name} {
             ::http::cleanup $token
 
             if {$returncode == 200} {
-                msg "water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
+                ::comms::msg -NOTICE "OTEL: water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
             } else {
-                msg "failed to send water level status: HTTP $returncode"
-                msg "response: $response"
+                ::comms::msg -WARNING "OTEL: failed to send water level status: HTTP $returncode"
+                ::comms::msg -WARNING "OTEL: response: $response"
             }
         } err]} {
-            msg "error sending water level status: $err"
+            ::comms::msg -ERROR "OTEL: error sending water level status: $err"
         }
     }
 
