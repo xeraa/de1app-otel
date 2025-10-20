@@ -53,3 +53,5 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 ```
 
 * Follow the log files in `~/Documents/GitHub/de1app/de1plus/` with `tail -f log.txt | grep -i -E "(ERROR|WARNING|otel)"`. You might have to explicitly flush them with the start / stop button in the app.
+* Add an [LLM in Kibana](http://localhost:5601/app/management/insightsAndAlerting/triggersActionsConnectors/connectors) like OpenAI for `chat-completion` with model `gpt-4.1-mini` (for `gpt-5-mini` you will need a verified organization). And make it the [default AI connector](http://localhost:5601/app/management/ai/genAiSettings).
+* [Enable Agent Builder](http://localhost:5601/app/management/ai/agentBuilder).
