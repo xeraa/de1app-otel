@@ -11,8 +11,9 @@ Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
 ## Configuration
 
 * OTLP endpoint: Where an OpenTelemetry Collector or managed endpoint is receiving the data.
-* Auto upload: Automatically upload all the log data.
-* Auto upload minimum seconds: Set to 0 to receive everything or a higher threshold to skip quick rinses or quickly cancelled operations.
+* Upload minimum seconds: Set to 0 to receive everything or a higher threshold to skip quick rinses or quickly cancelled operations.
+
+To run it in offline mode, start a hotspot on the coffee machine (under settings, like any Android phone), connect a laptop to it, and point the OTLP endpoint to the laptop's IP address.
 
 
 ## Development
