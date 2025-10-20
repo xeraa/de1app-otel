@@ -26,10 +26,10 @@ graph LR
 ```
 
 **Data Flow:**
-1. **Coffee Machine** - Decent Espresso with OTLP Plugin captures shot data, state changes, and water levels
-2. **EDOT** - Elastic Distribution for OpenTelemetry receives OTLP logs via HTTP endpoint
-3. **Elasticsearch** - Stores and indexes all telemetry data with custom attributes using Streams
-4. **Kibana** - Provides dashboards, visualizations, LLM-supported ingestion, and Agents to query the data
+1. **Coffee Machine**: [Decent Espresso](https://decentespresso.com) with OTLP Plugin (the `plugin.tcl` file) captures shot data, state changes, and water levels.
+2. **EDOT**: [Elastic Distribution for OpenTelemetry](https://www.elastic.co/docs/reference/edot-collector/) is an open-source distribution of the OpenTelemetry Collector that receives OTLP logs via HTTP.
+3. **Elasticsearch**: Stores and indexes all telemetry data with custom attributes using [Streams](https://www.elastic.co/docs/solutions/observability/streams/streams).
+4. **Kibana**: Provides dashboards, visualizations, LLM-supported ingestion, and Agents to query the data.
 
 
 ## Installation
