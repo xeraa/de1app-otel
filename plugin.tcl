@@ -42,7 +42,11 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
-    # Utility function for logging
+    # Convert nanosecond timestamp to human-readable format with timezone
+    proc format_timestamp_from_nanos { timeUnixNano } {
+        set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
+        return [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+    }
 
     # Create the header for OTLP/HTTP with optional API keys
     proc build_headers {} {
@@ -79,8 +83,7 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         # Create message string with timestamp and shot info
-        set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
-        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        set humanReadableTimestamp [format_timestamp_from_nanos $timeUnixNano]
 
         set messageParts [list "\[$humanReadableTimestamp\]"]
         if {$profileValue ne ""} {
@@ -281,8 +284,7 @@ namespace eval ::plugins::${plugin_name} {
         set messageParts [list]
 
         # Add absolute timestamp as first part in human-readable format with timezone
-        set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
-        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        set humanReadableTimestamp [format_timestamp_from_nanos $timeUnixNano]
         lappend messageParts "\[$humanReadableTimestamp\]"
 
         # Add elapsed time with prefix if available
@@ -699,8 +701,8 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         # Create message string with timestamp and water level info
-        set absoluteTimestampSeconds [format "%.0f" [expr {[clock milliseconds] / 1000}]]
-        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        set currentTimeNanos [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        set humanReadableTimestamp [format_timestamp_from_nanos $currentTimeNanos]
         set message "\[$humanReadableTimestamp\], water_level:${current_mm}mm, threshold:${refill_point_corrected}mm, status:$severity"
 
         # Create OTEL log body for water level
