@@ -63,6 +63,6 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 
 ![Streams Example](images/streams-example.png)
 
-* Build and include a dashboard similar to the included example:
+* Build and include a dashboard similar to the included `export.ndjson` example:
 
 ![Dashboard Example](images/dashboard-example.png)
