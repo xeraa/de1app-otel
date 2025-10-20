@@ -783,14 +783,30 @@ namespace eval ::plugins::${plugin_name} {
     # Entry point into the application
     proc main {} {
         plugins gui otel [create_ui]
-        ::de1::event::listener::after_flow_complete_add \
+
+        # Log major state changes
+        ::de1::event::listener::on_major_state_change_add \
             [lambda {event_dict} {
 
-            # Forward espresso shot data
-            ::plugins::otel::async_forward_shot
+            # Log for easier debugging
+            set previous_state ""
+            set this_state ""
+            if {[dict exists $event_dict previous_state]} {
+                set previous_state [dict get $event_dict previous_state]
+            }
+            if {[dict exists $event_dict this_state]} {
+                set this_state [dict get $event_dict this_state]
+            }
+            ::comms::msg -NOTICE "OTEL: major state change: $previous_state -> $this_state"
 
             # Forward water level status
             ::plugins::otel::async_forward_water_level
+        }]
+
+        ::de1::event::listener::after_flow_complete_add \
+            [lambda {event_dict} {
+            # Forward espresso shot data
+            ::plugins::otel::async_forward_shot
             } ]
     }
 
