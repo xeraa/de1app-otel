@@ -65,41 +65,42 @@ namespace eval ::plugins::${plugin_name} {
     }
 
     # Process the log data of espresso shots
-    proc parse_content_data { content } {
+    proc parse_content_data { content timeUnixNano } {
         # Parse the content JSON and extract only profile, meta, and app fields
-        set contentAttrs [list]
         set profileValue ""
-
-        # Define which fields to include
-        set allowedFields [list "profile" "meta" "app"]
+        set metaValue ""
+        set appValue ""
 
         if {[catch {set contentDict [::json::json2dict $content]} err] == 0} {
-            # Successfully parsed JSON, only add allowed fields
-            dict for {key value} $contentDict {
-                if {$key in $allowedFields} {
-                    lappend contentAttrs [json::write object \
-                        key [json::write string $key] \
-                        value [json::write object \
-                            stringValue [json::write string $value] \
-                        ] \
-                    ]
-                    # Extract profile value if it exists
-                    if {$key eq "profile"} {
-                        set profileValue $value
-                    }
-                }
+            # Successfully parsed JSON, extract specific fields
+            if {[dict exists $contentDict "profile"]} {
+                set profileValue [dict get $contentDict "profile"]
             }
-        } else {
-            # Failed to parse JSON, add the raw content as a single attribute
-            lappend contentAttrs [json::write object \
-                key [json::write string "raw_content"] \
-                value [json::write object \
-                    stringValue [json::write string $content] \
-                ] \
-            ]
+            if {[dict exists $contentDict "meta"]} {
+                set metaValue [dict get $contentDict "meta"]
+            }
+            if {[dict exists $contentDict "app"]} {
+                set appValue [dict get $contentDict "app"]
+            }
         }
 
-        return [list $contentAttrs $profileValue]
+        # Create message string with timestamp and shot info
+        set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
+        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+
+        set messageParts [list "\[$humanReadableTimestamp\]"]
+        if {$profileValue ne ""} {
+            lappend messageParts "profile:$profileValue"
+        }
+        if {$metaValue ne ""} {
+            lappend messageParts "meta:$metaValue"
+        }
+        if {$appValue ne ""} {
+            lappend messageParts "app:$appValue"
+        }
+
+        set message [join $messageParts ", "]
+        return $message
     }
 
     proc parse_timeseries_data { content } {
@@ -262,11 +263,11 @@ namespace eval ::plugins::${plugin_name} {
 
         set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
 
-        # Parse content data using the dedicated function
-        lassign [parse_content_data $content] contentAttrs profileValue
+        # Parse content data and create message
+        set message [parse_content_data $content $timeUnixNano]
 
         # Create the OpenTelemetry body using the dedicated function
-        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $profileValue $contentAttrs]
+        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $message]
 
         # Send the espresso shot data
         if {[catch {
@@ -446,7 +447,7 @@ namespace eval ::plugins::${plugin_name} {
         return [expr {$mainResult + $successCount}]
     }
 
-    proc create_otel_body { timeUnixNano observedTimeUnixNano profileValue contentAttrs } {
+    proc create_otel_body { timeUnixNano observedTimeUnixNano message } {
         # Create the OpenTelemetry log body structure following OTel semantic conventions
         return [json::write object \
             resourceLogs [json::write array \
@@ -472,7 +473,7 @@ namespace eval ::plugins::${plugin_name} {
                                     observedTimeUnixNano [json::write string $observedTimeUnixNano] \
                                     severityText [json::write string "INFO"] \
                                     body [json::write object \
-                                        stringValue [json::write string $profileValue] \
+                                        stringValue [json::write string $message] \
                                     ] \
                                     attributes [json::write array \
                                         [json::write object \
@@ -481,7 +482,6 @@ namespace eval ::plugins::${plugin_name} {
                                                 stringValue [json::write string "espresso_shot"] \
                                             ] \
                                         ] \
-                                        {*}$contentAttrs \
                                     ] \
                                 ] \
                             ] \
