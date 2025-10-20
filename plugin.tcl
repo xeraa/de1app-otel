@@ -41,10 +41,10 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
-    # Convert nanosecond timestamp to human-readable format with timezone
+s    # Convert nanosecond timestamp to ISO 8601 format with timezone
     proc format_timestamp_from_nanos { timeUnixNano } {
         set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
-        return [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        return [clock format $absoluteTimestampSeconds -format "%Y-%m-%dT%H:%M:%S%z"]
     }
 
     # Send a simple OTLP log with message and log type
