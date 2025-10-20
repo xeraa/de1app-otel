@@ -169,22 +169,26 @@ namespace eval ::plugins::${plugin_name} {
 
         ::comms::msg -NOTICE "OTEL: found $foundFields out of [llength $timeSeriesFields] data point fields"
 
-        # Check if elapsed field exists and compare lengths
+        # Check if elapsed field exists and trim other fields to match
         if {[dict exists $fieldData "elapsed"]} {
             set elapsedLength [llength [dict get $fieldData "elapsed"]]
 
-            if {$elapsedLength != $maxLength} {
-                ::comms::msg -WARNING "OTEL: elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
-            }
+            # If elapsed is shorter than other fields, trim them and warn once
+            if {$elapsedLength < $maxLength} {
+                ::comms::msg -WARNING "OTEL: elapsed field has $elapsedLength data points but other fields have up to $maxLength - trimming all fields to match elapsed"
 
-            # Check each field against elapsed length
-            dict for {field values} $fieldData {
-                if {$field ne "elapsed"} {
+                # Trim all fields to match elapsed length
+                dict for {field values} $fieldData {
                     set fieldLength [llength $values]
-                    if {$fieldLength != $elapsedLength} {
-                        ::comms::msg -WARNING "OTEL: field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
+                    if {$fieldLength > $elapsedLength} {
+                        # Trim to elapsed length (remove last data points)
+                        set trimmedValues [lrange $values 0 [expr {$elapsedLength - 1}]]
+                        dict set fieldData $field $trimmedValues
                     }
                 }
+
+                # Update maxLength to match elapsed
+                set maxLength $elapsedLength
             }
         } else {
             ::comms::msg -WARNING "OTEL: no 'elapsed' field found - timestamps may be incorrect for data point"
