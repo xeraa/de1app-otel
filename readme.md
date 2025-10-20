@@ -7,11 +7,19 @@ Plugin for the [Decent Espresso app](https://github.com/decentespresso/de1app). 
 
 ```mermaid
 graph LR
-    A[Decent Espresso Machine<br/>with OTLP Plugin] -->|OTLP/HTTP| B[EDOT<br/>Elastic Distribution<br/>for OpenTelemetry]
+    subgraph Machine[Decent Espresso Machine]
+        A1[Espresso App]
+        A2[OTLP Plugin]
+        A1 -.->|Events| A2
+    end
+
+    A2 -->|OTLP/HTTP| B[EDOT<br/>Elastic Distribution<br/>for OpenTelemetry]
     B -->|Ingestion| C[Elasticsearch]
     C -->|Visualization & Analysis| D[Kibana]
 
-    style A fill:#4e85f4,stroke:#333,stroke-width:2px,color:#fff
+    style Machine fill:#e8f0fe,stroke:#4e85f4,stroke-width:3px
+    style A1 fill:#fff,stroke:#4e85f4,stroke-width:2px
+    style A2 fill:#4e85f4,stroke:#333,stroke-width:2px,color:#fff
     style B fill:#00bfb3,stroke:#333,stroke-width:2px,color:#fff
     style C fill:#fed10a,stroke:#333,stroke-width:2px,color:#000
     style D fill:#f04e98,stroke:#333,stroke-width:2px,color:#fff
