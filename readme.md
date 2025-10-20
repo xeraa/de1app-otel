@@ -3,6 +3,27 @@
 Plugin for the [Decent Espresso app](https://github.com/decentespresso/de1app). The code is largely inspired by the [Visualizer Upload plugin](https://github.com/decentespresso/de1app/blob/main/de1plus/plugins/visualizer_upload/plugin.tcl).
 
 
+## Overview and Architecture
+
+```mermaid
+graph LR
+    A[Decent Espresso Machine<br/>with OTLP Plugin] -->|OTLP/HTTP| B[EDOT<br/>Elastic Distribution<br/>for OpenTelemetry]
+    B -->|Ingestion| C[Elasticsearch]
+    C -->|Visualization & Analysis| D[Kibana]
+
+    style A fill:#4e85f4,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#00bfb3,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#fed10a,stroke:#333,stroke-width:2px,color:#000
+    style D fill:#f04e98,stroke:#333,stroke-width:2px,color:#fff
+```
+
+**Data Flow:**
+1. **Coffee Machine** - Decent Espresso with OTLP Plugin captures shot data, state changes, and water levels
+2. **EDOT** - Elastic Distribution for OpenTelemetry receives OTLP logs via HTTP endpoint
+3. **Elasticsearch** - Stores and indexes all telemetry data with custom attributes using Streams
+4. **Kibana** - Provides dashboards, visualizations, LLM-supported ingestion, and Agents to query the data
+
+
 ## Installation
 
 Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
