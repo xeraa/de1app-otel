@@ -660,6 +660,86 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
+    # Submit major state change to OTEL
+    proc submit_state_change { previous_state this_state } {
+        variable settings
+
+        # Create message string with timestamp and state change info
+        set currentTimeNanos [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        set humanReadableTimestamp [format_timestamp_from_nanos $currentTimeNanos]
+        set message "\[$humanReadableTimestamp\] state_change from:$previous_state, to:$this_state"
+
+        # Create OTEL log body for state change
+        set content ""
+        http::register https 443 [list ::tls::socket -servername $::plugins::otel::settings(otlp_endpoint)]
+
+        set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
+        set headers [build_headers]
+
+        set timeUnixNano $currentTimeNanos
+        set observedTimeUnixNano $currentTimeNanos
+
+        set body [json::write object \
+            resourceLogs [json::write array \
+                [json::write object \
+                    resource [json::write object \
+                        attributes [json::write array \
+                            [json::write object \
+                                key [json::write string "service.name"] \
+                                value [json::write object \
+                                    stringValue [json::write string "decent-espresso"] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                    scopeLogs [json::write array \
+                        [json::write object \
+                            scope [json::write object \
+                                name [json::write string "otlp-logger"] \
+                            ] \
+                            logRecords [json::write array \
+                                [json::write object \
+                                    timeUnixNano [json::write string $timeUnixNano] \
+                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
+                                    severityText [json::write string "INFO"] \
+                                    body [json::write object \
+                                        stringValue [json::write string $message] \
+                                    ] \
+                                    attributes [json::write array \
+                                        [json::write object \
+                                            key [json::write string "log.type"] \
+                                            value [json::write object \
+                                                stringValue [json::write string "espresso_state-change"] \
+                                            ] \
+                                        ] \
+                                    ] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                ] \
+            ] \
+        ]
+
+        # Send state change data to OTEL
+        if {[catch {
+            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
+            set returncode [::http::ncode $token]
+            set response [::http::data $token]
+            ::http::cleanup $token
+
+            if {$returncode == 200} {
+                ::comms::msg -NOTICE "OTEL: state change sent successfully: $previous_state -> $this_state"
+            } else {
+                ::comms::msg -WARNING "OTEL: failed to send state change: HTTP $returncode"
+                ::comms::msg -WARNING "OTEL: response: $response"
+            }
+        } err]} {
+            ::comms::msg -ERROR "OTEL: error sending state change: $err"
+        }
+    }
+
+
     # Submit water level status to OTEL
     # Sends INFO if water is sufficient, WARN if at or below threshold
     proc submit_water_level_status {} {
@@ -779,15 +859,19 @@ namespace eval ::plugins::${plugin_name} {
         after 0 ::plugins::otel::submit_water_level_status
     }
 
+    # Kick off the state change forwarding (immediate)
+    proc async_forward_state_change { previous_state this_state } {
+        after 0 [list ::plugins::otel::submit_state_change $previous_state $this_state]
+    }
+
 
     # Entry point into the application
     proc main {} {
         plugins gui otel [create_ui]
 
-        # Log major state changes
+        # Log major state changes and forward to OTEL
         ::de1::event::listener::on_major_state_change_add \
             [lambda {event_dict} {
-
             # Log for easier debugging
             set previous_state ""
             set this_state ""
@@ -798,6 +882,9 @@ namespace eval ::plugins::${plugin_name} {
                 set this_state [dict get $event_dict this_state]
             }
             ::comms::msg -NOTICE "OTEL: major state change: $previous_state -> $this_state"
+
+            # Forward state change to OTEL
+            ::plugins::otel::async_forward_state_change $previous_state $this_state
 
             # Forward water level status
             ::plugins::otel::async_forward_water_level
