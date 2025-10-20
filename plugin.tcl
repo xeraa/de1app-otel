@@ -85,18 +85,18 @@ namespace eval ::plugins::${plugin_name} {
         # Create message string with timestamp and shot info
         set humanReadableTimestamp [format_timestamp_from_nanos $timeUnixNano]
 
-        set messageParts [list "\[$humanReadableTimestamp\]"]
+        set dataParts [list]
         if {$profileValue ne ""} {
-            lappend messageParts "profile:$profileValue"
+            lappend dataParts "profile:$profileValue"
         }
         if {$metaValue ne ""} {
-            lappend messageParts "meta:$metaValue"
+            lappend dataParts "meta:$metaValue"
         }
         if {$appValue ne ""} {
-            lappend messageParts "app:$appValue"
+            lappend dataParts "app:$appValue"
         }
 
-        set message [join $messageParts ", "]
+        set message "\[$humanReadableTimestamp\] [join $dataParts ", "]"
         return $message
     }
 
@@ -285,22 +285,23 @@ namespace eval ::plugins::${plugin_name} {
 
         # Add absolute timestamp as first part in human-readable format with timezone
         set humanReadableTimestamp [format_timestamp_from_nanos $timeUnixNano]
-        lappend messageParts "\[$humanReadableTimestamp\]"
+
+        set dataParts [list]
 
         # Add elapsed time with prefix if available
         if {[dict exists $dataPoint "elapsed"]} {
-            lappend messageParts "elapsed:[dict get $dataPoint "elapsed"]"
+            lappend dataParts "elapsed:[dict get $dataPoint "elapsed"]"
         }
 
         # Add all other fields in field:value format
         dict for {field value} $dataPoint {
             if {$field ne "elapsed"} {
-                lappend messageParts "$field:$value"
+                lappend dataParts "$field:$value"
             }
         }
 
-        # Join all parts with commas
-        set message [join $messageParts ", "]
+        # Join timestamp and data parts with space after timestamp
+        set message "\[$humanReadableTimestamp\] [join $dataParts ", "]"
 
         return [json::write object \
             resourceLogs [json::write array \
@@ -703,7 +704,7 @@ namespace eval ::plugins::${plugin_name} {
         # Create message string with timestamp and water level info
         set currentTimeNanos [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
         set humanReadableTimestamp [format_timestamp_from_nanos $currentTimeNanos]
-        set message "\[$humanReadableTimestamp\], water_level:${current_mm}mm, threshold:${refill_point_corrected}mm, status:$severity"
+        set message "\[$humanReadableTimestamp\] water_level:${current_mm}mm, threshold:${refill_point_corrected}mm, status:$severity"
 
         # Create OTEL log body for water level
         set content ""
