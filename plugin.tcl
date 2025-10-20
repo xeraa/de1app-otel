@@ -777,9 +777,14 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
-    # Kick off the background data forwarding
-    proc async_dispatch {old new} {
+    # Kick off the background shot data forwarding (100ms delay for data to settle)
+    proc async_forward_shot {} {
         after 100 ::plugins::otel::uploadShotData
+    }
+
+    # Kick off the water level status forwarding (immediate)
+    proc async_forward_water_level {} {
+        after 0 ::plugins::otel::submit_water_level_status
     }
 
 
@@ -790,12 +795,10 @@ namespace eval ::plugins::${plugin_name} {
             [lambda {event_dict} {
 
             # Forward espresso shot data
-            ::plugins::otel::async_dispatch \
-                [dict get $event_dict previous_state] \
-                [dict get $event_dict this_state] \
+            ::plugins::otel::async_forward_shot
 
             # Forward water level status
-            ::plugins::otel::submit_water_level_status
+            ::plugins::otel::async_forward_water_level
             } ]
     }
 
