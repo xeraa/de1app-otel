@@ -303,8 +303,6 @@ namespace eval ::plugins::${plugin_name} {
 
         if {[llength $dataPoints] == 0} {
             ::comms::msg -WARNING "OTEL: no data points created - all values were empty"
-        } else {
-            ::comms::msg -NOTICE "OTEL: successfully created [llength $dataPoints] data points"
         }
         return $dataPoints
     }
@@ -339,6 +337,7 @@ namespace eval ::plugins::${plugin_name} {
         set body [create_otel_body $timeUnixNano $observedTimeUnixNano $message]
 
         # Send the espresso shot data
+        set success 0
         if {[catch {
             set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
             set status [http::status $token]
@@ -346,16 +345,15 @@ namespace eval ::plugins::${plugin_name} {
             http::cleanup $token
 
             if {$returncode == 200} {
-                ::comms::msg -NOTICE "OTEL: espresso shot sent successfully"
-                return 1
+                set success 1
             } else {
                 ::comms::msg -WARNING "OTEL: failed to send espresso shot: HTTP $returncode"
-                return 0
             }
         } err]} {
             ::comms::msg -ERROR "OTEL: error sending espresso shot: $err"
-            return 0
         }
+
+        return $success
     }
 
     proc create_timeseries_otel_body { timeUnixNano observedTimeUnixNano dataPoint } {
@@ -565,10 +563,6 @@ namespace eval ::plugins::${plugin_name} {
     proc upload {content} {
         variable settings
 
-        ::comms::msg -NOTICE "OTEL: forwarding log"
-
-        set settings(last_action) "upload"
-
         # Safely get espresso_clock with fallback
         if {[info exists ::settings(espresso_clock)]} {
             set settings(last_forward_shot) $::settings(espresso_clock)
@@ -588,8 +582,6 @@ namespace eval ::plugins::${plugin_name} {
         set hasTotals [string match "*totals*" $content]
         set hasResistance [string match "*resistance*" $content]
         set hasStateChange [string match "*state_change*" $content]
-
-        ::comms::msg -NOTICE "OTEL: data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
 
         if {$hasElapsed && ($hasPressure || $hasFlow || $hasTemperature || $hasTotals || $hasResistance || $hasStateChange)} {
             return [send_timeseries_data $content]
@@ -718,7 +710,6 @@ namespace eval ::plugins::${plugin_name} {
 
     proc uploadShotData {} {
         variable settings
-        set settings(last_action) "upload"
 
         # Safely get espresso_clock with fallback
         if {[info exists ::settings(espresso_clock)]} {
