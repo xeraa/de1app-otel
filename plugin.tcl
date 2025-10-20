@@ -41,7 +41,7 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
-s    # Convert nanosecond timestamp to ISO 8601 format with timezone
+    # Convert nanosecond timestamp to ISO 8601 format with timezone
     proc format_timestamp_from_nanos { timeUnixNano } {
         set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
         return [clock format $absoluteTimestampSeconds -format "%Y-%m-%dT%H:%M:%S%z"]
