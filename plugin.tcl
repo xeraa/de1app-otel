@@ -47,6 +47,83 @@ namespace eval ::plugins::${plugin_name} {
         return [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
     }
 
+    # Send a simple OTLP log with message and log type
+    proc send_otlp_log { message log_type {severity "INFO"} } {
+        variable settings
+
+        # Setup connection
+        http::register https 443 [list ::tls::socket -servername $::plugins::otel::settings(otlp_endpoint)]
+        set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
+        set headers [build_headers]
+
+        # Create timestamps
+        set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        set observedTimeUnixNano $timeUnixNano
+
+        # Create OTLP body
+        set body [json::write object \
+            resourceLogs [json::write array \
+                [json::write object \
+                    resource [json::write object \
+                        attributes [json::write array \
+                            [json::write object \
+                                key [json::write string "service.name"] \
+                                value [json::write object \
+                                    stringValue [json::write string "decent-espresso"] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                    scopeLogs [json::write array \
+                        [json::write object \
+                            scope [json::write object \
+                                name [json::write string "otlp-logger"] \
+                            ] \
+                            logRecords [json::write array \
+                                [json::write object \
+                                    timeUnixNano [json::write string $timeUnixNano] \
+                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
+                                    severityText [json::write string $severity] \
+                                    body [json::write object \
+                                        stringValue [json::write string $message] \
+                                    ] \
+                                    attributes [json::write array \
+                                        [json::write object \
+                                            key [json::write string "log.type"] \
+                                            value [json::write object \
+                                                stringValue [json::write string $log_type] \
+                                            ] \
+                                        ] \
+                                    ] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                ] \
+            ] \
+        ]
+
+        # Send HTTP request
+        set success 0
+        if {[catch {
+            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
+            set returncode [::http::ncode $token]
+            set response [::http::data $token]
+            ::http::cleanup $token
+
+            if {$returncode == 200} {
+                set success 1
+            } else {
+                ::comms::msg -WARNING "OTEL: failed to send $log_type: HTTP $returncode"
+                ::comms::msg -WARNING "OTEL: response: $response"
+            }
+        } err]} {
+            ::comms::msg -ERROR "OTEL: error sending $log_type: $err"
+        }
+
+        return $success
+    }
+
     # Create the header for OTLP/HTTP with optional API keys
     proc build_headers {} {
         variable settings
@@ -662,80 +739,16 @@ namespace eval ::plugins::${plugin_name} {
 
     # Submit major state change to OTEL
     proc submit_state_change { previous_state this_state } {
-        variable settings
-
         # Create message string with timestamp and state change info
         set currentTimeNanos [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
         set humanReadableTimestamp [format_timestamp_from_nanos $currentTimeNanos]
         set message "\[$humanReadableTimestamp\] state_change from:$previous_state, to:$this_state"
 
-        # Create OTEL log body for state change
-        set content ""
-        http::register https 443 [list ::tls::socket -servername $::plugins::otel::settings(otlp_endpoint)]
+        # Send using reusable method
+        set success [send_otlp_log $message "espresso_state-change" "INFO"]
 
-        set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
-        set headers [build_headers]
-
-        set timeUnixNano $currentTimeNanos
-        set observedTimeUnixNano $currentTimeNanos
-
-        set body [json::write object \
-            resourceLogs [json::write array \
-                [json::write object \
-                    resource [json::write object \
-                        attributes [json::write array \
-                            [json::write object \
-                                key [json::write string "service.name"] \
-                                value [json::write object \
-                                    stringValue [json::write string "decent-espresso"] \
-                                ] \
-                            ] \
-                        ] \
-                    ] \
-                    scopeLogs [json::write array \
-                        [json::write object \
-                            scope [json::write object \
-                                name [json::write string "otlp-logger"] \
-                            ] \
-                            logRecords [json::write array \
-                                [json::write object \
-                                    timeUnixNano [json::write string $timeUnixNano] \
-                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
-                                    severityText [json::write string "INFO"] \
-                                    body [json::write object \
-                                        stringValue [json::write string $message] \
-                                    ] \
-                                    attributes [json::write array \
-                                        [json::write object \
-                                            key [json::write string "log.type"] \
-                                            value [json::write object \
-                                                stringValue [json::write string "espresso_state-change"] \
-                                            ] \
-                                        ] \
-                                    ] \
-                                ] \
-                            ] \
-                        ] \
-                    ] \
-                ] \
-            ] \
-        ]
-
-        # Send state change data to OTEL
-        if {[catch {
-            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
-            set returncode [::http::ncode $token]
-            set response [::http::data $token]
-            ::http::cleanup $token
-
-            if {$returncode == 200} {
-                ::comms::msg -NOTICE "OTEL: state change sent successfully: $previous_state -> $this_state"
-            } else {
-                ::comms::msg -WARNING "OTEL: failed to send state change: HTTP $returncode"
-                ::comms::msg -WARNING "OTEL: response: $response"
-            }
-        } err]} {
-            ::comms::msg -ERROR "OTEL: error sending state change: $err"
+        if {$success} {
+            ::comms::msg -NOTICE "OTEL: state change sent successfully: $previous_state -> $this_state"
         }
     }
 
@@ -778,73 +791,11 @@ namespace eval ::plugins::${plugin_name} {
         set humanReadableTimestamp [format_timestamp_from_nanos $currentTimeNanos]
         set message "\[$humanReadableTimestamp\] water_level:${current_mm}mm, threshold:${refill_point_corrected}mm, status:$severity"
 
-        # Create OTEL log body for water level
-        set content ""
-        http::register https 443 [list ::tls::socket -servername $::plugins::otel::settings(otlp_endpoint)]
+        # Send using reusable method
+        set success [send_otlp_log $message "espresso_water-level" $severity]
 
-        set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
-        set headers [build_headers]
-
-        set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
-        set observedTimeUnixNano $timeUnixNano
-
-        set body [json::write object \
-            resourceLogs [json::write array \
-                [json::write object \
-                    resource [json::write object \
-                        attributes [json::write array \
-                            [json::write object \
-                                key [json::write string "service.name"] \
-                                value [json::write object \
-                                    stringValue [json::write string "decent-espresso"] \
-                                ] \
-                            ] \
-                        ] \
-                    ] \
-                    scopeLogs [json::write array \
-                        [json::write object \
-                            scope [json::write object \
-                                name [json::write string "otlp-logger"] \
-                            ] \
-                            logRecords [json::write array \
-                                [json::write object \
-                                    timeUnixNano [json::write string $timeUnixNano] \
-                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
-                                    severityText [json::write string $severity] \
-                                    body [json::write object \
-                                        stringValue [json::write string $message] \
-                                    ] \
-                                    attributes [json::write array \
-                                        [json::write object \
-                                            key [json::write string "log.type"] \
-                                            value [json::write object \
-                                                stringValue [json::write string "espresso_water-level"] \
-                                            ] \
-                                        ] \
-                                    ] \
-                                ] \
-                            ] \
-                        ] \
-                    ] \
-                ] \
-            ] \
-        ]
-
-        # Send water level data to OTEL
-        if {[catch {
-            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
-            set returncode [::http::ncode $token]
-            set response [::http::data $token]
-            ::http::cleanup $token
-
-            if {$returncode == 200} {
-                ::comms::msg -NOTICE "OTEL: water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
-            } else {
-                ::comms::msg -WARNING "OTEL: failed to send water level status: HTTP $returncode"
-                ::comms::msg -WARNING "OTEL: response: $response"
-            }
-        } err]} {
-            ::comms::msg -ERROR "OTEL: error sending water level status: $err"
+        if {$success} {
+            ::comms::msg -NOTICE "OTEL: water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
         }
     }
 
