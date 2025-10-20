@@ -22,7 +22,6 @@ namespace eval ::plugins::${plugin_name} {
             array set  ::plugins::otel::settings {
                 otlp_endpoint http://localhost:4318
                 otlp_api_key ""
-                min_seconds 2
             }
             set needs_save_settings 1
         }
@@ -654,18 +653,7 @@ namespace eval ::plugins::${plugin_name} {
 
         set settings(last_upload_result) ""
 
-        set min_seconds [ifexists settings(min_seconds) 2]
-        if {[espresso_elapsed length] < $min_seconds && [espresso_pressure length] < $min_seconds } {
-            set settings(last_upload_result) [translate "Not forwarded: shot was too short"]
-            save_plugin_settings otel
-            return
-        }
         ::comms::msg -NOTICE "OTEL: espresso_elapsed = [espresso_elapsed range end end]s"
-        if {[espresso_elapsed range end end] < $min_seconds } {
-            set settings(last_upload_result) [translate "Not forwarded: shot duration was less than $min_seconds seconds"]
-            save_plugin_settings otel
-            return
-        }
 
         set espresso_data [::shot::create]
         ::plugins::otel::upload $espresso_data
@@ -837,11 +825,6 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
         dui add entry $page_name 280 860 -tags api_key -width 38 -font Helv_8  -borderwidth 1 -bg #fbfaff -foreground #4e85f4 -textvariable ::plugins::otel::settings(otlp_api_key) -relief flat  -highlightthickness 1 -highlightcolor #000000 \
             -label [translate "API Key (optional)"] -label_pos {280 800} -label_font Helv_8 -label_width 1000 -label_fill "#444444"
         bind $widgets(api_key) <Return> [namespace current]::save_settings
-
-        # Minimum seconds to forward
-        dui add entry $page_name 280 980 -tags min_seconds -textvariable ::plugins::otel::settings(min_seconds) -width 3 -font Helv_8  -borderwidth 1 -bg #fbfaff  -foreground #4e85f4 -relief flat -highlightthickness 1 -highlightcolor #000000 \
-            -label [translate "Minimum shot seconds to upload"] -label_pos {280 920} -label_font Helv_8 -label_width 1100 -label_fill "#444444"
-        bind $widgets(min_seconds) <Return> [namespace current]::save_settings
 
         # Last upload shot
         dui add dtext $page_name 1350 480 -tags last_action_label -text [translate "Last upload:"] -font Helv_8 -width 900 -fill "#444444"
