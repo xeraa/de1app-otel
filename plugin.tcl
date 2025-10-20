@@ -683,6 +683,118 @@ namespace eval ::plugins::${plugin_name} {
     }
 
 
+    # Submit water level status to OTEL
+    # Sends INFO if water is sufficient, WARN if at or below threshold
+    proc submit_water_level_status {} {
+        variable settings
+
+        # Read current water level in mm (default to 0 if not present)
+        set current_mm 0
+        if {[info exists ::de1(water_level)]} {
+            set current_mm $::de1(water_level)
+        } else {
+            msg "couldn't find or access water level"
+        }
+
+        # Compute corrected refill threshold (settings + hardware correction)
+        set refill_point_corrected $::settings(water_refill_point)
+        if {[info exists ::de1(water_level_mm_correction)]} {
+            set refill_point_corrected [expr {$refill_point_corrected + $::de1(water_level_mm_correction)}]
+        }
+
+        # Determine severity and message based on water level
+        if {$current_mm <= $refill_point_corrected} {
+            set severity "WARN"
+            ::comms::msg -NOTICE "Water level low (${current_mm}mm <= ${refill_point_corrected}mm)"
+
+            # Optionally trigger existing refill helper if available
+            if {[info procs de1_cause_refill_now_if_level_low] ne ""} {
+                catch {de1_cause_refill_now_if_level_low}
+            }
+        } else {
+            set severity "INFO"
+            ::comms::msg -NOTICE "Water level sufficient (${current_mm}mm > ${refill_point_corrected}mm)"
+        }
+
+        # Create message string with timestamp and water level info
+        set absoluteTimestampSeconds [format "%.0f" [expr {[clock milliseconds] / 1000}]]
+        set humanReadableTimestamp [clock format $absoluteTimestampSeconds -format "%Y-%m-%d %H:%M:%S %Z"]
+        set message "\[$humanReadableTimestamp\], water_level:${current_mm}mm, threshold:${refill_point_corrected}mm, status:$severity"
+
+        # Create OTEL log body for water level
+        set content ""
+        http::register https 443 [list ::tls::socket -servername $::plugins::otel::settings(otlp_endpoint)]
+
+        set url "$::plugins::otel::settings(otlp_endpoint)/v1/logs"
+        set headers [build_headers]
+
+        msg "Water level endpoint URL: $url"
+        set timeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
+        set observedTimeUnixNano $timeUnixNano
+
+        msg "Water level OTEL body - timeUnixNano: $timeUnixNano, observedTimeUnixNano: $observedTimeUnixNano"
+
+        set body [json::write object \
+            resourceLogs [json::write array \
+                [json::write object \
+                    resource [json::write object \
+                        attributes [json::write array \
+                            [json::write object \
+                                key [json::write string "service.name"] \
+                                value [json::write object \
+                                    stringValue [json::write string "decent-espresso"] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                    scopeLogs [json::write array \
+                        [json::write object \
+                            scope [json::write object \
+                                name [json::write string "otlp-logger"] \
+                            ] \
+                            logRecords [json::write array \
+                                [json::write object \
+                                    timeUnixNano [json::write string $timeUnixNano] \
+                                    observedTimeUnixNano [json::write string $observedTimeUnixNano] \
+                                    severityText [json::write string $severity] \
+                                    body [json::write object \
+                                        stringValue [json::write string $message] \
+                                    ] \
+                                    attributes [json::write array \
+                                        [json::write object \
+                                            key [json::write string "log.type"] \
+                                            value [json::write object \
+                                                stringValue [json::write string "espresso_water-level"] \
+                                            ] \
+                                        ] \
+                                    ] \
+                                ] \
+                            ] \
+                        ] \
+                    ] \
+                ] \
+            ] \
+        ]
+
+        # Send water level data to OTEL
+        if {[catch {
+            set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
+            set returncode [::http::ncode $token]
+            set response [::http::data $token]
+            ::http::cleanup $token
+
+            if {$returncode == 200} {
+                msg "water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
+            } else {
+                msg "failed to send water level status: HTTP $returncode"
+                msg "response: $response"
+            }
+        } err]} {
+            msg "error sending water level status: $err"
+        }
+    }
+
+
     # Kick off the background data forwarding
     proc async_dispatch {old new} {
         after 100 ::plugins::otel::uploadShotData
@@ -699,6 +811,9 @@ namespace eval ::plugins::${plugin_name} {
             ::plugins::otel::async_dispatch \
                 [dict get $event_dict previous_state] \
                 [dict get $event_dict this_state] \
+
+            # Forward water level status
+            ::plugins::otel::submit_water_level_status
             } ]
     }
 
