@@ -694,7 +694,7 @@ namespace eval ::plugins::${plugin_name} {
         # Determine severity and message based on water level
         if {$current_mm <= $refill_point_corrected} {
             set severity "WARN"
-            ::comms::msg -NOTICE "Water level low (${current_mm}mm <= ${refill_point_corrected}mm)"
+            ::comms::msg -NOTICE "OTEL: water level low (${current_mm}mm <= ${refill_point_corrected}mm)"
 
             # Optionally trigger existing refill helper if available
             if {[info procs de1_cause_refill_now_if_level_low] ne ""} {
@@ -702,7 +702,7 @@ namespace eval ::plugins::${plugin_name} {
             }
         } else {
             set severity "INFO"
-            ::comms::msg -NOTICE "Water level sufficient (${current_mm}mm > ${refill_point_corrected}mm)"
+            ::comms::msg -NOTICE "OTEL: water level sufficient (${current_mm}mm > ${refill_point_corrected}mm)"
         }
 
         # Create message string with timestamp and water level info
