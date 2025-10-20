@@ -103,11 +103,10 @@ namespace eval ::plugins::${plugin_name} {
     }
 
     proc parse_timeseries_data { content } {
-        msg "Starting data point parsing"
 
         # Parse the content JSON and extract data points
         if {[catch {set contentDict [::json::json2dict $content]} err] != 0} {
-            msg "Failed to parse JSON: $err"
+            msg "failed to parse JSON: $err"
             return [list]
         }
 
@@ -130,8 +129,6 @@ namespace eval ::plugins::${plugin_name} {
             "state_change"
         }
 
-        msg "Looking for [llength $timeSeriesFields] data point fields"
-
         # Extract all data point arrays
         set fieldData [dict create]
         set maxLength 0
@@ -150,17 +147,17 @@ namespace eval ::plugins::${plugin_name} {
                         set fieldValues [dict get $parentData $childField]
                         dict set fieldData $field $fieldValues
                         set fieldLength [llength $fieldValues]
-                        msg "Field '$field' has $fieldLength values"
+                        msg "field '$field' has $fieldLength values"
 
                         if {$fieldLength > $maxLength} {
                             set maxLength $fieldLength
                         }
                         incr foundFields
                     } else {
-                        msg "Child field '$childField' not found in '$parentField'"
+                        msg "child field '$childField' not found in '$parentField'"
                     }
                 } else {
-                    msg "Parent field '$parentField' not found in content"
+                    msg "packagearent field '$parentField' not found in content"
                 }
             } else {
                 # Handle non-nested fields
@@ -168,27 +165,26 @@ namespace eval ::plugins::${plugin_name} {
                     set fieldValues [dict get $contentDict $field]
                     dict set fieldData $field $fieldValues
                     set fieldLength [llength $fieldValues]
-                    msg "Field '$field' has $fieldLength values"
+                    msg "field '$field' has $fieldLength values"
 
                     if {$fieldLength > $maxLength} {
                         set maxLength $fieldLength
                     }
                     incr foundFields
                 } else {
-                    msg "Field '$field' not found in content"
+                    msg "field '$field' not found in content"
                 }
             }
         }
 
-        msg "Found $foundFields out of [llength $timeSeriesFields] data point fields"
+        msg "found $foundFields out of [llength $timeSeriesFields] data point fields"
 
         # Check if elapsed field exists and compare lengths
         if {[dict exists $fieldData "elapsed"]} {
             set elapsedLength [llength [dict get $fieldData "elapsed"]]
 
             if {$elapsedLength != $maxLength} {
-                msg "WARNING: Elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
-                msg "Some data points may have misaligned timestamps"
+                msg "WARNING: elapsed field length ($elapsedLength) does not match maximum field length ($maxLength)"
             }
 
             # Check each field against elapsed length
@@ -196,16 +192,16 @@ namespace eval ::plugins::${plugin_name} {
                 if {$field ne "elapsed"} {
                     set fieldLength [llength $values]
                     if {$fieldLength != $elapsedLength} {
-                        msg "WARNING: Field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
+                        msg "WARNING: field '$field' length ($fieldLength) differs from elapsed length ($elapsedLength)"
                     }
                 }
             }
         } else {
-            msg "WARNING: No 'elapsed' field found - timestamps may be incorrect for data point"
+            msg "WARNING: no 'elapsed' field found - timestamps may be incorrect for data point"
         }
 
         if {$maxLength == 0} {
-            msg "No data point found - all fields empty or missing"
+            msg "no data point found - all fields empty or missing"
             return [list]
         }
 
@@ -236,9 +232,9 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {[llength $dataPoints] == 0} {
-            msg "No data points created - all values were empty"
+            msg "no data points created - all values were empty"
         } else {
-            msg "Successfully created [llength $dataPoints] data points"
+            msg "successfully created [llength $dataPoints] data points"
         }
         return $dataPoints
     }
@@ -280,14 +276,14 @@ namespace eval ::plugins::${plugin_name} {
             http::cleanup $token
 
             if {$returncode == 200} {
-                msg "Espresso shot sent successfully"
+                msg "espresso shot sent successfully"
                 return 1
             } else {
-                msg "Failed to send espresso shot: HTTP $returncode"
+                msg "failed to send espresso shot: HTTP $returncode"
                 return 0
             }
         } err]} {
-            msg "Error sending espresso shot: $err"
+            msg "error sending espresso shot: $err"
             return 0
         }
     }
@@ -525,13 +521,12 @@ namespace eval ::plugins::${plugin_name} {
         set hasResistance [string match "*resistance*" $content]
         set hasStateChange [string match "*state_change*" $content]
 
-        msg "Data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
+        msg "data points detection: elapsed=$hasElapsed pressure=$hasPressure flow=$hasFlow temperature=$hasTemperature totals=$hasTotals resistance=$hasResistance state_change=$hasStateChange"
 
         if {$hasElapsed && ($hasPressure || $hasFlow || $hasTemperature || $hasTotals || $hasResistance || $hasStateChange)} {
-            msg "Detected data points, using specialized handler"
             return [send_timeseries_data $content]
         } else {
-            msg "No data points detected, using espresso shot metadata only"
+            msg "no data points detected, using espresso shot data only"
         }
 
         # Fall back to regular single-document upload
@@ -665,7 +660,7 @@ namespace eval ::plugins::${plugin_name} {
             set settings(last_forward_shot) $::settings(espresso_clock)
         } else {
             set settings(last_forward_shot) [clock seconds]
-            msg "No espresso_clock found, using current time"
+            msg "no espresso_clock found, using current time"
         }
 
         set settings(last_upload_result) ""
@@ -699,6 +694,8 @@ namespace eval ::plugins::${plugin_name} {
         plugins gui otel [create_ui]
         ::de1::event::listener::after_flow_complete_add \
             [lambda {event_dict} {
+
+            # Forward espresso shot data
             ::plugins::otel::async_dispatch \
                 [dict get $event_dict previous_state] \
                 [dict get $event_dict this_state] \
