@@ -21,7 +21,8 @@ To run it in offline mode, start a hotspot on the coffee machine (under settings
 * [Environment setup](https://github.com/decentespresso/de1app/blob/main/documentation/de1_app_plugin_development_overview.md#set-up-your-development-environment)
 * Symlinked the plugin file into a clone of the de1app repository: `ln -s ~/Documents/GitHub/de1app-otel/plugin.tcl
 ~/Documents/GitHub/de1app/de1plus/plugins/otel/`
-* Start a local OTel Collector: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot`
+* Start a local OTel Collector with Elastic: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot`
+  This needs to be at least version 9.2 and you can use snapshots: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot -v 9.2.0-SNAPSHOT`
 * Send the following request and find the result in Kibana to make sure it's working end to end:
 
 ```sh
