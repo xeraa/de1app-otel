@@ -8,7 +8,7 @@ set plugin_name "otel"
 namespace eval ::plugins::${plugin_name} {
     variable author "Philipp Krenn"
     variable contact "pk@xeraa.net"
-    variable version 1.0
+    variable version 1.1
     variable description "Forward logs to an OTel endpoint using OTLP/HTTP"
     variable name "OpenTelemetry"
 
