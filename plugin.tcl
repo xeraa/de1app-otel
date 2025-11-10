@@ -61,7 +61,7 @@ namespace eval ::plugins::${plugin_name} {
         set settings(last_otel_type) $activity_type
         set settings(last_otel_result) $result_message
 
-        ::comms::msg -NOTICE "OTEL: recorded activity - $activity_type: $result_message"
+        ::comms::msg -NOTICE "OTEL: recorded activity: $activity_type: $result_message"
         plugins save_settings otel
     }
 
@@ -291,11 +291,11 @@ namespace eval ::plugins::${plugin_name} {
                 set maxLength $elapsedLength
             }
         } else {
-            ::comms::msg -WARNING "OTEL: no 'elapsed' field found - timestamps may be incorrect for data point"
+            ::comms::msg -WARNING "OTEL: no 'elapsed' field found; timestamps may be incorrect for data point"
         }
 
         if {$maxLength == 0} {
-            ::comms::msg -NOTICE "OTEL: no data point found - all fields empty or missing"
+            ::comms::msg -NOTICE "OTEL: no data point found; all fields empty or missing"
             return [list]
         }
 
@@ -326,7 +326,7 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {[llength $dataPoints] == 0} {
-            ::comms::msg -WARNING "OTEL: no data points created - all values were empty"
+            ::comms::msg -WARNING "OTEL: no data points created; all values were empty"
         }
         return $dataPoints
     }
@@ -770,7 +770,7 @@ namespace eval ::plugins::${plugin_name} {
             plugins save_settings otel
         } else {
             # This should not happen as errors are handled above, but just in case
-            set result_msg "[translate {Forward failed}] - unknown error"
+            set result_msg "[translate {Forward failed}] with unknown error"
             ::comms::msg -ERROR "OTEL: forward failed with unknown error"
             popup [translate_toast "Forward failed"]
             set settings(last_upload_result) $result_msg
@@ -811,13 +811,13 @@ namespace eval ::plugins::${plugin_name} {
         set success [send_otlp_log $message "espresso_state-change" "INFO"]
 
         if {$success} {
-            set result_msg "State change: $previous_state -> $this_state"
+            set result_msg "Successful state change: $previous_state -> $this_state"
             ::comms::msg -NOTICE "OTEL: state change sent successfully: $previous_state -> $this_state"
-            record_otel_activity "State Change" $result_msg 1
+            record_otel_activity "State change" $result_msg 1
         } else {
-            set result_msg "Failed to send state change: $previous_state -> $this_state"
+            set result_msg "Failed state change: $previous_state -> $this_state"
             ::comms::msg -WARNING "OTEL: failed to send state change: $previous_state -> $this_state"
-            record_otel_activity "State Change" $result_msg 0
+            record_otel_activity "State change" $result_msg 0
         }
     }
 
@@ -868,7 +868,7 @@ namespace eval ::plugins::${plugin_name} {
             ::comms::msg -NOTICE "OTEL: water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
             record_otel_activity "Water Level" $result_msg 1
         } else {
-            set result_msg "Failed to send water level $severity: ${current_mm}mm"
+            set result_msg "Failed water level $severity: ${current_mm}mm"
             ::comms::msg -WARNING "OTEL: failed to send water level status: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
             record_otel_activity "Water Level" $result_msg 0
         }
@@ -956,7 +956,7 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
         bind $widgets(api_key) <Return> [namespace current]::save_settings
 
         # Last OTel activity
-        dui add dtext $page_name 1350 480 -tags last_otel_label -text [translate "Last OTel Activity:"] -font Helv_8 -width 900 -fill "#444444"
+        dui add dtext $page_name 1350 480 -tags last_otel_label -text [translate "Last OpenTelemetry Activity:"] -font Helv_8 -width 900 -fill "#444444"
         dui add dtext $page_name 1350 520 -tags last_otel_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
 
         # Last OTel result
@@ -998,9 +998,9 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
         set activity_type $::plugins::otel::settings(last_otel_type)
 
         if { [clock format [clock seconds] -format "%Y%m%d"] eq [clock format $dt -format "%Y%m%d"] } {
-            return "$activity_type - [translate {today at}] [time_format $dt]"
+            return "$activity_type: [translate {today at}] [time_format $dt]"
         } else {
-            return "$activity_type - [clock format $dt -format {%B %d %Y, %H:%M}]"
+            return "$activity_type: [clock format $dt -format {%B %d %Y, %H:%M}]"
         }
     }
 
