@@ -13,7 +13,7 @@ graph LR
         A1 -.->|Events| A2
     end
 
-    A2 -->|OTLP/HTTP| B[(Managed) OTel Collector<br/>or EDOT]
+    A2 -->|OTLP/HTTP| B["(Managed) OTel Collector<br/>or EDOT"]
     B -->|Ingestion| C[Elasticsearch]
     C -->|Visualization & Analysis| D[Kibana]
 
