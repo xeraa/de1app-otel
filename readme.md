@@ -81,9 +81,11 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 ```
 
 * Follow the log files in `~/Documents/GitHub/de1app/de1plus/` with `tail -f log.txt | grep -i -E "(ERROR|WARNING|otel)"`. You might have to explicitly flush them with the start / stop button in the app.
-* Add an [LLM in Kibana](http://localhost:5601/app/management/insightsAndAlerting/triggersActionsConnectors/connectors) like OpenAI for `chat-completion` (under advanced settings) with model `gpt-4.1-mini` (for `gpt-5-mini` you will need a verified organization). And make it the [default AI connector](http://localhost:5601/app/management/ai/genAiSettings).
+* Add an [LLM in Kibana](http://localhost:5601/app/management/insightsAndAlerting/triggersActionsConnectors/connectors) like OpenAI for `chat-completion` (under advanced settings) with model `gpt-4.1-mini` (for `gpt-5-mini` you will need a verified organization). Or use the built-in one on Elastic Cloud.
+* Make it the [default AI connector](http://localhost:5601/app/management/ai/genAiSettings).
 * [Enable Agent Builder](http://localhost:5601/app/management/ai/agentBuilder).
 * Enable wired streams on the [settings page of Streams](http://localhost:5601/app/streams) (at least in 9.2).
+* Enable `logs_index` locally by adding `logs_index: logs` in the `elasticsearch/otel:` exporter (right under `password:`). On Elastic Cloud, [turn on wired streams and configure the fleet policy](https://www.elastic.co/docs/solutions/observability/streams/wired-streams#streams-wired-streams-enable).
 * Partition in the stream based on `attributes.log.type` for `espresso_state-change`, `espresso_water-level`, `espresso_data-point`, and `espresso_shot`.
 * Start with an LLM suggestion for Grok patterns but tweak it if needed. Example patterns (tweaked):
   * `espresso_state-change`: `\[%{TIMESTAMP_ISO8601:attributes.custom.timestamp}\] state_change from:%{WORD:attributes.custom.from_state}, to:%{WORD:attributes.custom.to_state}`
@@ -94,7 +96,6 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 ![Streams Example](images/streams-example.png)
 
 * Create a [Data View](http://localhost:5601/app/management/kibana/dataViews) for `logs.*`.
-
 * Build and include a dashboard similar to the included `export.ndjson` example:
 
 ![Dashboard Example](images/dashboard-example.png)
