@@ -90,6 +90,12 @@ namespace eval ::plugins::${plugin_name} {
                                     stringValue [json::write string "decent-espresso"] \
                                 ] \
                             ] \
+                            [json::write object \
+                                key [json::write string "service.version"] \
+                                value [json::write object \
+                                    stringValue [json::write string $::plugins::otel::version] \
+                                ] \
+                            ] \
                         ] \
                     ] \
                     scopeLogs [json::write array \
@@ -413,6 +419,12 @@ namespace eval ::plugins::${plugin_name} {
                                     stringValue [json::write string "decent-espresso"] \
                                 ] \
                             ] \
+                            [json::write object \
+                                key [json::write string "service.version"] \
+                                value [json::write object \
+                                    stringValue [json::write string $::plugins::otel::version] \
+                                ] \
+                            ] \
                         ] \
                     ] \
                     scopeLogs [json::write array \
@@ -560,6 +572,12 @@ namespace eval ::plugins::${plugin_name} {
                                 key [json::write string "service.name"] \
                                 value [json::write object \
                                     stringValue [json::write string "decent-espresso"] \
+                                ] \
+                            ] \
+                            [json::write object \
+                                key [json::write string "service.version"] \
+                                value [json::write object \
+                                    stringValue [json::write string $::plugins::otel::version] \
                                 ] \
                             ] \
                         ] \
