@@ -100,14 +100,16 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 
 ![Dashboard Example](images/dashboard-example.png)
 
+* If you're running this on Elastic Cloud and want to provide access to other Elasticians, configure [Oktonaut](https://oktanaut.app.elastic.dev/config)
+
 
 ## Todo
 
-* Add significant events
+* Further improve the parsing of espresso shots
+* Add significant events (and use wired streams for all setups)
 * Add Alerts and / or SLOs for the water level
 * Better total stats in dashboard?
 * Distinguish better between coffee and other activities?
-? More and better popup messages
 * Document how to run a local LLM for offline mode
 * Agent Builder integration for coffee stats
 * Integrate Workflows into brewing a coffee? Similar to https://github.com/randomcoffeesnob/decent-advanced-rest-api
