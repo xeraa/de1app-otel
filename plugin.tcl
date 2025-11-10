@@ -957,14 +957,14 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
 
         # Last OTel activity
         dui add dtext $page_name 1350 480 -tags last_otel_label -text [translate "Last OpenTelemetry Activity:"] -font Helv_8 -width 900 -fill "#444444"
-        dui add dtext $page_name 1350 520 -tags last_otel_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+        dui add dtext $page_name 1350 530 -tags last_otel_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
 
         # Last OTel result
-        dui add dtext $page_name 1350 560 -tags last_otel_result -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+        dui add dtext $page_name 1350 570 -tags last_otel_result -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
 
         # Legacy espresso shot info
-        dui add dtext $page_name 1350 640 -tags last_shot_label -text [translate "Last Espresso Shot:"] -font Helv_8 -width 900 -fill "#444444"
-        dui add dtext $page_name 1350 680 -tags last_shot_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+        dui add dtext $page_name 1350 700 -tags last_shot_label -text [translate "Last Espresso Shot:"] -font Helv_8 -width 900 -fill "#444444"
+        dui add dtext $page_name 1350 750 -tags last_shot_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
     }
 
 
