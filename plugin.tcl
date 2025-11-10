@@ -155,7 +155,7 @@ namespace eval ::plugins::${plugin_name} {
 
         # Add API key if configured
         if {[info exists settings(otlp_api_key)] && [string trim $settings(otlp_api_key)] ne ""} {
-            lappend headers "Authorization" "Bearer $settings(otlp_api_key)"
+            lappend headers "Authorization" "ApiKey $settings(otlp_api_key)"
             ::comms::msg -NOTICE "OTEL: adding API key to request headers"
         }
 
