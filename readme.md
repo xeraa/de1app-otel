@@ -99,3 +99,15 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 * Build and include a dashboard similar to the included `export.ndjson` example:
 
 ![Dashboard Example](images/dashboard-example.png)
+
+
+## Todo
+
+* Add significant events
+* Add Alerts and / or SLOs for the water level
+* Better total stats in dashboard?
+* Distinguish better between coffee and other activities?
+? More and better popup messages
+* Document how to run a local LLM for offline mode
+* Agent Builder integration for coffee stats
+* Integrate Workflows into brewing a coffee? Similar to https://github.com/randomcoffeesnob/decent-advanced-rest-api
