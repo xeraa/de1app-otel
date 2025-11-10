@@ -30,6 +30,12 @@ namespace eval ::plugins::${plugin_name} {
             set ::plugins::otel::settings(last_upload_result) {}
             set needs_save_settings 1
         }
+        if { ![info exists ::plugins::otel::settings(last_otel_activity)] } {
+            set ::plugins::otel::settings(last_otel_activity) {}
+            set ::plugins::otel::settings(last_otel_type) {}
+            set ::plugins::otel::settings(last_otel_result) {}
+            set needs_save_settings 1
+        }
         if { $needs_save_settings == 1 } {
             plugins save_settings otel
         }
@@ -45,6 +51,18 @@ namespace eval ::plugins::${plugin_name} {
     proc format_timestamp_from_nanos { timeUnixNano } {
         set absoluteTimestampSeconds [format "%.0f" [expr {$timeUnixNano / 1000000000}]]
         return [clock format $absoluteTimestampSeconds -format "%Y-%m-%dT%H:%M:%S%z"]
+    }
+
+    # Record OTel activity for settings display
+    proc record_otel_activity { activity_type result_message {success 1} } {
+        variable settings
+
+        set settings(last_otel_activity) [clock seconds]
+        set settings(last_otel_type) $activity_type
+        set settings(last_otel_result) $result_message
+
+        ::comms::msg -NOTICE "OTEL: recorded activity - $activity_type: $result_message"
+        plugins save_settings otel
     }
 
     # Send a simple OTLP log with message and log type
@@ -342,12 +360,15 @@ namespace eval ::plugins::${plugin_name} {
             set token [http::geturl $url -headers $headers -method POST -query $body -timeout 8000]
             set status [http::status $token]
             set returncode [http::ncode $token]
+            set response [http::data $token]
             http::cleanup $token
 
             if {$returncode == 200} {
                 set success 1
+                ::comms::msg -NOTICE "OTEL: espresso shot sent successfully"
             } else {
                 ::comms::msg -WARNING "OTEL: failed to send espresso shot: HTTP $returncode"
+                ::comms::msg -WARNING "OTEL: response: $response"
             }
         } err]} {
             ::comms::msg -ERROR "OTEL: error sending espresso shot: $err"
@@ -499,14 +520,29 @@ namespace eval ::plugins::${plugin_name} {
             after 10
         }
 
-        ::comms::msg -NOTICE "OTEL: sent espresso shot + $successCount/$totalCount data points successfully"
+        ::comms::msg -NOTICE "OTEL: sent espresso shot (result: $mainResult) + $successCount/$totalCount data points successfully"
 
-        if {$successCount > 0} {
+        # Determine overall success and appropriate message
+        if {$mainResult && $successCount > 0} {
+            set result_msg "Forwarded espresso shot + $successCount/$totalCount data points"
             popup [translate_toast "Forwarded espresso shot + $successCount data points"]
-            set settings(last_upload_result) "Forwarded espresso shot + $successCount/$totalCount data points"
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso shot + data points" $result_msg 1
+        } elseif {$mainResult && $successCount == 0} {
+            set result_msg "Forwarded espresso shot only: $totalCount data points failed"
+            popup [translate_toast "Forwarded espresso shot only (data points failed)"]
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso shot only" $result_msg 0
+        } elseif {!$mainResult && $successCount > 0} {
+            set result_msg "Espresso shot failed, but forwarded $successCount/$totalCount data points"
+            popup [translate_toast "Espresso shot failed, but forwarded $successCount data points"]
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Data points only" $result_msg 0
         } else {
-            popup [translate_toast "Forwarded espresso shot only"]
-            set settings(last_upload_result) "Forwarded espresso shot only"
+            set result_msg "Espresso shot and all $totalCount data points failed"
+            popup [translate_toast "Espresso shot and all $totalCount data points failed"]
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso shot + data points" $result_msg 0
         }
 
         plugins save_settings otel
@@ -612,10 +648,10 @@ namespace eval ::plugins::${plugin_name} {
         set observedTimeUnixNano [format "%.0f" [expr {[clock milliseconds] * 1000000}]]
 
         # Parse content data using the dedicated function
-        lassign [parse_content_data $content] contentAttrs profileValue
+        set message [parse_content_data $content $timeUnixNano]
 
         # Create the OpenTelemetry body using the dedicated function
-        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $profileValue $contentAttrs]
+        set body [create_otel_body $timeUnixNano $observedTimeUnixNano $message]
 
 
         set returncode 0
@@ -676,35 +712,53 @@ namespace eval ::plugins::${plugin_name} {
         }
 
         if {$returncode == 401} {
+            set result_msg [translate "Authentication failed. Please check credentials"]
             ::comms::msg -ERROR "OTEL: forward failed: unauthorized"
             popup [translate_toast "Forward authentication failed. Please check credentials"]
-            set settings(last_upload_result) [translate "Authentication failed. Please check credentials"]
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso Shot" $result_msg 0
             plugins save_settings otel
             return
         }
         if {[string length $answer] == 0 || $returncode != 200} {
+            set result_msg "[translate {Forward failed}] $returnfullcode"
             ::comms::msg -ERROR "OTEL: forward failed: $returnfullcode"
             popup [translate_toast "Forward failed"]
-            set settings(last_upload_result) "[translate {Forward failed}] $returnfullcode"
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso Shot" $result_msg 0
             plugins save_settings otel
             return
         }
 
-        if {[catch {
-            set response [::json::json2dict $answer]
-        } err] != 0} {
-            ::comms::msg -WARNING "OTEL: forward successful but unexpected server answer"
-            set settings(last_upload_result) [translate "Forward successful but unexpected server answer"]
+        # Only show success if we actually succeeded
+        if {$success} {
+            if {[catch {
+                set response [::json::json2dict $answer]
+            } err] != 0} {
+                set result_msg [translate "Forward successful but unexpected server answer"]
+                ::comms::msg -WARNING "OTEL: forward successful but unexpected server answer"
+                popup [translate_toast "Forward successful but unexpected server response"]
+                set settings(last_upload_result) $result_msg
+                record_otel_activity "Espresso Shot" $result_msg 1
+                plugins save_settings otel
+                return
+            }
+
+            set result_msg [translate {Forward successful}]
+            popup [translate_toast "Forward successful"]
+            ::comms::msg -NOTICE "OTEL: forward successful"
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso Shot" $result_msg 1
             plugins save_settings otel
-            return
+        } else {
+            # This should not happen as errors are handled above, but just in case
+            set result_msg "[translate {Forward failed}] - unknown error"
+            ::comms::msg -ERROR "OTEL: forward failed with unknown error"
+            popup [translate_toast "Forward failed"]
+            set settings(last_upload_result) $result_msg
+            record_otel_activity "Espresso Shot" $result_msg 0
+            plugins save_settings otel
         }
-
-        popup [translate_toast "Forward successful"]
-        ::comms::msg -NOTICE "OTEL: forward successful"
-        set settings(last_upload_result) "[translate {Forward successful}]"
-        save_plugin_settings otel
-
-        plugins save_settings otel
     }
 
 
@@ -739,7 +793,13 @@ namespace eval ::plugins::${plugin_name} {
         set success [send_otlp_log $message "espresso_state-change" "INFO"]
 
         if {$success} {
+            set result_msg "State change: $previous_state -> $this_state"
             ::comms::msg -NOTICE "OTEL: state change sent successfully: $previous_state -> $this_state"
+            record_otel_activity "State Change" $result_msg 1
+        } else {
+            set result_msg "Failed to send state change: $previous_state -> $this_state"
+            ::comms::msg -WARNING "OTEL: failed to send state change: $previous_state -> $this_state"
+            record_otel_activity "State Change" $result_msg 0
         }
     }
 
@@ -786,7 +846,13 @@ namespace eval ::plugins::${plugin_name} {
         set success [send_otlp_log $message "espresso_water-level" $severity]
 
         if {$success} {
+            set result_msg "Water level $severity: ${current_mm}mm (threshold: ${refill_point_corrected}mm)"
             ::comms::msg -NOTICE "OTEL: water level status sent successfully: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
+            record_otel_activity "Water Level" $result_msg 1
+        } else {
+            set result_msg "Failed to send water level $severity: ${current_mm}mm"
+            ::comms::msg -WARNING "OTEL: failed to send water level status: $severity, level=${current_mm}mm, threshold=${refill_point_corrected}mm"
+            record_otel_activity "Water Level" $result_msg 0
         }
     }
 
@@ -871,28 +937,54 @@ namespace eval ::plugins::${plugin_name}::otel_settings {
             -label [translate "API Key (optional)"] -label_pos {280 800} -label_font Helv_8 -label_width 1000 -label_fill "#444444"
         bind $widgets(api_key) <Return> [namespace current]::save_settings
 
-        # Last upload shot
-        dui add dtext $page_name 1350 480 -tags last_action_label -text [translate "Last upload:"] -font Helv_8 -width 900 -fill "#444444"
-        dui add dtext $page_name 1350 540 -tags last_action -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+        # Last OTel activity
+        dui add dtext $page_name 1350 480 -tags last_otel_label -text [translate "Last OTel Activity:"] -font Helv_8 -width 900 -fill "#444444"
+        dui add dtext $page_name 1350 520 -tags last_otel_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
 
-        # Last upload result
-        dui add dtext $page_name 1350 600 -tags last_action_result -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+        # Last OTel result
+        dui add dtext $page_name 1350 560 -tags last_otel_result -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
+
+        # Legacy espresso shot info
+        dui add dtext $page_name 1350 640 -tags last_shot_label -text [translate "Last Espresso Shot:"] -font Helv_8 -width 900 -fill "#444444"
+        dui add dtext $page_name 1350 680 -tags last_shot_info -font Helv_8 -width 900 -fill "#6c757d" -anchor "nw" -justify "left"
     }
 
 
     # This is run immediately after the settings page is shown, wherever it is invoked from
     proc show { page_to_hide page_to_show } {
-        dui item config $page_to_show last_action_label -text [translate "Last forward:"]
-        dui item config $page_to_show last_action -text [::plugins::otel::otel_settings::format_shot_start]
+        # Display comprehensive OTel activity information
+        dui item config $page_to_show last_otel_info -text [::plugins::otel::otel_settings::format_otel_activity]
 
-        # Safely display last_upload_result
-        if {[info exists ::plugins::otel::settings(last_upload_result)]} {
-            dui item config $page_to_show last_action_result -text $::plugins::otel::settings(last_upload_result)
+        # Safely display last OTel result
+        if {[info exists ::plugins::otel::settings(last_otel_result)]} {
+            dui item config $page_to_show last_otel_result -text $::plugins::otel::settings(last_otel_result)
         } else {
-            dui item config $page_to_show last_action_result -text ""
+            dui item config $page_to_show last_otel_result -text [translate "No OTel activity recorded"]
         }
+
+        # Display legacy espresso shot information
+        dui item config $page_to_show last_shot_info -text [::plugins::otel::otel_settings::format_shot_start]
     }
 
+
+    proc format_otel_activity {} {
+        # Check if we have OTel activity data
+        if {![info exists ::plugins::otel::settings(last_otel_activity)] ||
+            $::plugins::otel::settings(last_otel_activity) eq {} ||
+            ![info exists ::plugins::otel::settings(last_otel_type)] ||
+            $::plugins::otel::settings(last_otel_type) eq {}} {
+            return [translate "No OTel activity recorded"]
+        }
+
+        set dt $::plugins::otel::settings(last_otel_activity)
+        set activity_type $::plugins::otel::settings(last_otel_type)
+
+        if { [clock format [clock seconds] -format "%Y%m%d"] eq [clock format $dt -format "%Y%m%d"] } {
+            return "$activity_type - [translate {today at}] [time_format $dt]"
+        } else {
+            return "$activity_type - [clock format $dt -format {%B %d %Y, %H:%M}]"
+        }
+    }
 
     proc format_shot_start {} {
         set dt $::plugins::otel::settings(last_forward_shot)
