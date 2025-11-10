@@ -13,7 +13,7 @@ graph LR
         A1 -.->|Events| A2
     end
 
-    A2 -->|OTLP/HTTP| B[EDOT<br/>Elastic Distribution<br/>for OpenTelemetry]
+    A2 -->|OTLP/HTTP| B[(Managed) OTel Collector<br/>or EDOT]
     B -->|Ingestion| C[Elasticsearch]
     C -->|Visualization & Analysis| D[Kibana]
 
@@ -27,7 +27,7 @@ graph LR
 
 **Data Flow:**
 1. **Coffee Machine**: [Decent Espresso](https://decentespresso.com) with OTLP Plugin (the `plugin.tcl` file) captures shot data, state changes, and water levels.
-2. **EDOT**: [Elastic Distribution for OpenTelemetry](https://www.elastic.co/docs/reference/edot-collector/) is an open-source distribution of the OpenTelemetry Collector that receives OTLP logs via HTTP.
+2. **OpenTelemetry Collector or EDOT**: [Elastic Distribution for OpenTelemetry](https://www.elastic.co/docs/reference/edot-collector/) is an open source distribution of the OpenTelemetry Collector that receives OTLP logs via HTTP.
 3. **Elasticsearch**: Stores and indexes all telemetry data with custom attributes using [Streams](https://www.elastic.co/docs/solutions/observability/streams/streams).
 4. **Kibana**: Provides dashboards, visualizations, LLM-supported ingestion, and Agents to query the data.
 
@@ -40,9 +40,9 @@ Copy the `plugin.tcl` file to your tablet folder `de1plus/plugins/otel`.
 ## Configuration
 
 * OTLP endpoint: Where an OpenTelemetry Collector or managed endpoint is receiving the data.
-* Upload minimum seconds: Set to 0 to receive everything or a higher threshold to skip quick rinses or quickly cancelled operations.
+* API key: Optional credentials if required by the OTLP endpoint.
 
-To run it in offline mode, start a hotspot on the coffee machine (under settings, like any Android phone), connect a laptop to it, and point the OTLP endpoint to the laptop's IP address.
+To run it in offline mode, start a hotspot on the coffee machine (under *Settings*, like any Android phone), connect a laptop to it, and point the OTLP endpoint to the laptop's IP address.
 
 
 ## Development
@@ -50,8 +50,7 @@ To run it in offline mode, start a hotspot on the coffee machine (under settings
 * [Environment setup](https://github.com/decentespresso/de1app/blob/main/documentation/de1_app_plugin_development_overview.md#set-up-your-development-environment)
 * Symlinked the plugin file into a clone of the de1app repository: `ln -s ~/Documents/GitHub/de1app-otel/plugin.tcl
 ~/Documents/GitHub/de1app/de1plus/plugins/otel/`
-* Start a local OTel Collector with Elastic: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot`
-  This needs to be at least version 9.2 and you can use snapshots: `curl -fsSL https://elastic.co/start-local | sh -s -- --edot -v 9.2.0-SNAPSHOT`
+* Start a local OTel Collector with Elastic (version 9.2+): `curl -fsSL https://elastic.co/start-local | sh -s -- --edot`
 * Send the following request and find the result in Kibana to make sure it's working end to end:
 
 ```sh
