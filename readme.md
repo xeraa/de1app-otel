@@ -14,7 +14,7 @@ graph LR
     end
 
     A2 -->|OTLP/HTTP| B["(Managed) OTel Collector<br/>or EDOT"]
-    B -->|Ingestion| C[Elasticsearch]
+    B -->|Streams| C[Elasticsearch]
     C -->|Visualization & Analysis| D[Kibana]
 
     style Machine fill:#e8f0fe,stroke:#4e85f4,stroke-width:3px
