@@ -108,8 +108,7 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 * Further improve the parsing of espresso shots
 * Add significant events (and use wired streams for all setups)
 * Add Alerts and / or SLOs for the water level
-* Better total stats in dashboard?
-* Distinguish better between coffee and other activities?
+* Integrate scale (and grinder?)
 * Document how to run a local LLM for offline mode
 * Agent Builder integration for coffee stats
 * Integrate Workflows into brewing a coffee? Similar to https://github.com/randomcoffeesnob/decent-advanced-rest-api
