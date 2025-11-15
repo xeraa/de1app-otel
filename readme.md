@@ -125,7 +125,7 @@ POST /_security/user/anonymous
 ## Todo
 
 * Further improve the parsing of espresso shots
-* Add significant events (and use wired streams for all setups)
+* Use wired streams for all setups and add significant events
 * Add Alerts and / or SLOs for the water level
 * Integrate scale (and grinder?)
 * Document how to run a local LLM for offline mode
