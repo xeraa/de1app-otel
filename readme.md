@@ -100,7 +100,26 @@ curl -XPOST http://localhost:4318/v1/logs -H "Content-Type: application/json" -d
 
 ![Dashboard Example](images/dashboard-example.png)
 
-* If you're running this on Elastic Cloud and want to provide access to other Elasticians, configure [Oktonaut](https://oktanaut.app.elastic.dev/config)
+* If you want to grant [anonymous access to Kibana](https://www.elastic.co/docs/deploy-manage/users-roles/cluster-or-deployment-auth/kibana-authentication#anonymous-authentication), add the following role and user (in addition to the kibana.yml configuration):
+
+```
+PUT /_security/role/everyone-read
+{
+  "indices": [ {
+    "names": "*",
+    "privileges": [ "read", "view_index_metadata", "read_failure_store", "monitor" ]
+  } ]
+}
+POST /_security/user/anonymous
+{
+  "password" : "...",
+  "roles" : [ "everyone-read", "viewer", "monitoring_user" ],
+  "full_name" : "anonymous",
+  "email" : "",
+  "metadata": {},
+  "enabled": true
+}
+```
 
 
 ## Todo
