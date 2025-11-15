@@ -118,13 +118,6 @@ namespace eval ::plugins::${plugin_name} {
                                                 stringValue [json::write string $log_type] \
                                             ] \
                                         ] \
-                                        # Used to turn the log into a wired stream
-                                        [json::write object \
-                                            key [json::write string "elasticsearch.index"] \
-                                            value [json::write object \
-                                                stringValue [json::write string "logs"] \
-                                            ] \
-                                        ] \
                                     ] \
                                 ] \
                             ] \
@@ -454,13 +447,6 @@ namespace eval ::plugins::${plugin_name} {
                                                 stringValue [json::write string "espresso_data-point"] \
                                             ] \
                                         ] \
-                                        # Used to turn the log into a wired stream
-                                        [json::write object \
-                                            key [json::write string "elasticsearch.index"] \
-                                            value [json::write object \
-                                                stringValue [json::write string "logs"] \
-                                            ] \
-                                        ] \
                                     ] \
                                 ] \
                             ] \
@@ -614,13 +600,6 @@ namespace eval ::plugins::${plugin_name} {
                                             key [json::write string "log.type"] \
                                             value [json::write object \
                                                 stringValue [json::write string "espresso_shot"] \
-                                            ] \
-                                        ] \
-                                        # Used to turn the log into a wired stream
-                                        [json::write object \
-                                            key [json::write string "elasticsearch.index"] \
-                                            value [json::write object \
-                                                stringValue [json::write string "logs"] \
                                             ] \
                                         ] \
                                     ] \
